@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary;
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Allow text selection in content areas */
+  .selectable,
+  .selectable * {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+}
+
+@layer utilities {
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-surface;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border-subtle;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border;
+  }
+
+  /* Focus ring — matches accent color */
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.DEFAULT');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* Prose dark theme overrides for react-markdown preview */
+.prose.prose-invert {
+  --tw-prose-body: theme('colors.text.primary');
+  --tw-prose-headings: theme('colors.text.primary');
+  --tw-prose-lead: theme('colors.text.secondary');
+  --tw-prose-links: theme('colors.accent.DEFAULT');
+  --tw-prose-bold: theme('colors.text.primary');
+  --tw-prose-counters: theme('colors.text.secondary');
+  --tw-prose-bullets: theme('colors.text.muted');
+  --tw-prose-hr: theme('colors.border.subtle');
+  --tw-prose-quotes: theme('colors.text.secondary');
+  --tw-prose-quote-borders: theme('colors.border.DEFAULT');
+  --tw-prose-captions: theme('colors.text.muted');
+  --tw-prose-code: theme('colors.accent.DEFAULT');
+  --tw-prose-pre-code: theme('colors.text.primary');
+  --tw-prose-pre-bg: theme('colors.bg.elevated');
+  --tw-prose-th-borders: theme('colors.border.subtle');
+  --tw-prose-td-borders: theme('colors.border.subtle');
+}

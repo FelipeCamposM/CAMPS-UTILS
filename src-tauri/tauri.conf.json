@@ -1,0 +1,51 @@
+{
+  "productName": "CAMPS-UTILS",
+  "version": "0.1.0",
+  "identifier": "com.camps.utils",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev:vite",
+    "beforeBuildCommand": "npm run build:vite"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "CAMPS-UTILS",
+        "width": 1000,
+        "height": 720,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: https://asset.localhost https://*.ytimg.com https://img.youtube.com https://*.ggpht.com",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/converter"
+    ],
+    "resources": [
+      "binaries/ffmpeg.exe",
+      "binaries/ffprobe.exe"
+    ]
+  }
+}

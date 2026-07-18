@@ -1,0 +1,29 @@
+mod commands;
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::convert_pdf,
+            commands::docling_installed,
+            commands::ensure_docling,
+            commands::run_tool,
+            commands::youtube_info,
+            commands::download_youtube,
+            commands::download_spotify,
+            commands::compress_video,
+            commands::convert_audio,
+            commands::video_to_gif,
+            commands::convert_images,
+            commands::resize_images,
+            commands::generate_qr,
+            commands::hash_files,
+            commands::save_markdown,
+            commands::open_folder,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

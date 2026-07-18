@@ -1,0 +1,40 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/gen/
+
+# Python
+.venv/
+python/dist/
+python/build/
+python/__pycache__/
+python/*.spec
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+logs/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
