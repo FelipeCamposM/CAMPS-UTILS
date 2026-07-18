@@ -173,8 +173,8 @@ pub async fn run_tool(app: AppHandle, tool: String, input_json: String) -> Resul
 const TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
 const DOCLING_URL: &str =
     "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/docling-v1/camps-docling.zip";
-/// SHA256 do camps-docling.zip. Preencher após rodar `python build.py docling`.
-const DOCLING_SHA256: &str = "";
+/// SHA256 do camps-docling.zip (de `python build.py docling`).
+const DOCLING_SHA256: &str = "6620709852f9edeba4a8d9f4b232c2f1b70396f0286b040370eb3f789f6782bf";
 
 fn docling_exe_name() -> String {
     format!("converter-docling-{TARGET_TRIPLE}.exe")

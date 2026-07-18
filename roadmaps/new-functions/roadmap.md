@@ -127,14 +127,19 @@ empacotado dá `MODEL_ERROR`. Também: rebuild do sidecar tem que rodar **depois
       `npm run dev` e validar visualmente TODAS as tools (inclui runtime de imagem e thumbnails).
 - [x] Ícone CAMPS-UTILS: `New-AppIcon` agora desenha "CU"; ícones regenerados via `npx tauri icon`
       (`src-tauri/icons/*`).
-- [ ] **build.py 2 bundles**: `camps-light` (xhtml2pdf, markdown; futuramente yt-dlp/PyMuPDF/pikepdf)
-      no instalador via `externalBin`; `camps-docling.zip` + `sha256` p/ o Release.
-- [ ] **Web installer NSIS**: `tauri.conf.json → bundle.windows.nsis.installerHooks`
-      (`NSIS_HOOK_POSTINSTALL`) baixa `camps-docling-vX.zip` do GitHub Release, valida SHA256, extrai.
-- [ ] **Rust** `docling_sidecar_path()`: resolve o sidecar Docling em `$INSTDIR/runtime/...`;
-      se ausente, fallback baixa no 1º uso do PDF→MD.
-- [ ] Publicar `camps-docling-vX.zip` + hash no GitHub Release (documentar passo/CI).
-- [ ] Restringir alvos: NSIS = web installer (online); MSI = full offline (opcional).
+- [x] **build.py split**: `python build.py light|docling|both`. Light exclui torch/docling
+      (`--exclude-module`) → só ferramentas leves. Docling gera `camps-docling.zip` + `.sha256`.
+- [x] **Download no 1º uso** (escolhido em vez de NSIS): Rust `ensure_docling` (reqwest stream +
+      SHA256 + crate `zip` → `%LOCALAPPDATA%/com.camps.utils/runtime/`), `docling_installed`, rota
+      release `pdf2md` → sidecar docling baixado (`run_docling_release`). Frontend `DoclingGate` no
+      PdfToMarkdownTool (botão + barra via evento `docling-progress`). Dev = no-op (roda a fonte).
+- [x] Git: `git init` + commit em `main` + remote `FelipeCamposM/CAMPS-UTILS`.
+- [~] Build **light** — em andamento (background).
+- [ ] Build **docling** (`python build.py docling`) → zip + hash.
+- [ ] **Usuário:** `git push -u origin main`; criar Release tag `docling-v1`; subir
+      `python/dist/camps-docling.zip`.
+- [ ] Preencher `DOCLING_SHA256` em `commands.rs` com o hash gerado; `npm run build` (instalador).
+- [ ] (Opcional/futuro) NSIS install-time download; MSI full offline.
 
 ### Fase 2 — YouTube
 - [x] Empacotar **ffmpeg + ffprobe** (static, ~87MB cada) em `src-tauri/binaries/`; `tauri.conf.json`
