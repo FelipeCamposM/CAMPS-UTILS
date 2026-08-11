@@ -2,6 +2,8 @@ mod commands;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -10,15 +12,24 @@ pub fn run() {
             commands::convert_pdf,
             commands::docling_installed,
             commands::ensure_docling,
+            commands::ffmpeg_installed,
+            commands::ensure_ffmpeg,
+            commands::whisper_installed,
+            commands::ensure_whisper,
+            commands::depth_installed,
+            commands::ensure_depth,
             commands::run_tool,
             commands::youtube_info,
             commands::download_youtube,
-            commands::download_spotify,
             commands::compress_video,
+            commands::burn_subtitles,
+            commands::system_fonts,
+            commands::video_encoder,
             commands::convert_audio,
             commands::video_to_gif,
             commands::convert_images,
             commands::resize_images,
+            commands::compress_images,
             commands::generate_qr,
             commands::hash_files,
             commands::save_markdown,

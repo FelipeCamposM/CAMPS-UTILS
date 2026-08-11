@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { compressVideo, openFolder } from "../../services/conversionService";
+import { compressVideo } from "../../services/conversionService";
 import type { ToolProps } from "../registry";
+import { useToolEnter } from "../../lib/motion";
+import { Button, FilePicker, ResultPanel, SegmentedControl } from "../../components/ui";
 
 const VIDEO_EXTS = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"];
 
@@ -12,9 +14,9 @@ const LEVELS: { label: string; crf: number; hint: string }[] = [
   { label: "Forte", crf: 32, hint: "menor arquivo" },
 ];
 
-export function VideoCompressTool({ addHistory }: ToolProps) {
+export function VideoCompressTool({ settings, addHistory }: ToolProps) {
   const [input, setInput] = useState<string | null>(null);
-  const [crf, setCrf] = useState(28);
+  const [crf, setCrf] = useState(settings.videoCrf);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<string | null>(null);
@@ -29,15 +31,6 @@ export function VideoCompressTool({ addHistory }: ToolProps) {
 
   function name(p: string) {
     return p.split(/[/\\]/).pop() ?? p;
-  }
-
-  async function pickFile() {
-    const picked = await open({ multiple: false, filters: [{ name: "Vídeos", extensions: VIDEO_EXTS }] });
-    if (typeof picked === "string") {
-      setInput(picked);
-      setResult(null);
-      setError(null);
-    }
   }
 
   async function handleCompress() {
@@ -74,47 +67,46 @@ export function VideoCompressTool({ addHistory }: ToolProps) {
     }
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
-      <button
-        onClick={pickFile}
-        className="w-full rounded-lg border border-dashed border-border-subtle px-4 py-3 text-sm text-text-muted hover:border-border hover:text-text-secondary hover:bg-bg-elevated transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+    <div ref={toolRef} className="space-y-4">
+      <FilePicker
+        accept={VIDEO_EXTS}
+        filterName="Vídeos"
+        maxSizeMb={settings.maxFileSizeMb}
+        onError={setError}
+        onPick={([p]) => { setInput(p); setResult(null); setError(null); }}
+        className="w-full"
       >
         {input ? name(input) : "Selecionar vídeo"}
-      </button>
+      </FilePicker>
 
-      <div className="space-y-2">
-        <span className="text-text-secondary text-xs font-medium">Nível de compressão</span>
-        <div className="flex gap-2">
-          {LEVELS.map((l) => (
-            <button
-              key={l.crf}
-              onClick={() => setCrf(l.crf)}
-              className={[
-                "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
-                crf === l.crf ? "bg-accent text-white" : "border border-border-subtle text-text-secondary hover:bg-bg-elevated",
-              ].join(" ")}
-            >
-              <span className="block">{l.label}</span>
-              <span className="block text-[10px] opacity-70">{l.hint}</span>
-            </button>
-          ))}
-        </div>
+      <div className="glass rounded-glass p-4">
+        <SegmentedControl
+          label="Nível de compressão"
+          options={LEVELS.map((l) => ({ value: l.crf, label: l.label, title: l.hint }))}
+          value={crf}
+          onChange={setCrf}
+          description={LEVELS.find((l) => l.crf === crf)?.hint}
+        />
       </div>
 
-      <button
+      <Button
+        variant="primary"
+        className="w-full"
         onClick={handleCompress}
-        disabled={!input || busy}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        disabled={!input}
+        loading={busy}
       >
         {busy ? "Comprimindo…" : "Comprimir e salvar…"}
-      </button>
+      </Button>
 
       {busy && (
         <div className="space-y-1">
-          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
+          <div className="glass-inset h-2 rounded-full overflow-hidden">
             <div
-              className="h-full bg-accent transition-all"
+              className="shimmer h-full bg-accent transition-all duration-300"
               style={{ width: `${progress}%` }}
               role="progressbar"
               aria-valuenow={progress}
@@ -124,16 +116,9 @@ export function VideoCompressTool({ addHistory }: ToolProps) {
         </div>
       )}
 
-      {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-      {result && (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 flex items-center justify-between gap-2">
-          <p className="text-green-400 text-xs truncate">Salvo: {result}</p>
-          <button onClick={() => openFolder(result)} className="text-accent text-xs hover:underline shrink-0">
-            Abrir pasta
-          </button>
-        </div>
-      )}
+      {result && <ResultPanel paths={[result]} />}
     </div>
   );
 }

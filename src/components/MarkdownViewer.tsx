@@ -2,6 +2,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { Button } from "./ui";
 
 interface MarkdownViewerProps {
   content: string;
@@ -29,9 +30,9 @@ export function MarkdownViewer({
   }
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-bg-surface overflow-hidden flex flex-col">
+    <div className="glass overflow-hidden flex flex-col">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-border-subtle bg-bg-elevated">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-border-subtle bg-overlay/[0.06]">
         <TabButton active={activeTab === "code"} onClick={() => setActiveTab("code")}>
           Código Markdown
         </TabButton>
@@ -41,21 +42,13 @@ export function MarkdownViewer({
 
         <div className="flex-1" />
 
-        <button
-          onClick={handleCopy}
-          aria-label="Copiar conteúdo"
-          className="px-3 py-1.5 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-border-subtle transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
+        <Button variant="ghost" size="sm" aria-label="Copiar conteúdo" onClick={handleCopy}>
           {copied ? "Copiado!" : "Copiar"}
-        </button>
+        </Button>
 
-        <button
-          onClick={onClear}
-          aria-label="Limpar resultado"
-          className="px-3 py-1.5 rounded-md text-xs font-medium text-text-muted hover:text-text-secondary hover:bg-border-subtle transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
+        <Button variant="ghost" size="sm" aria-label="Limpar resultado" onClick={onClear}>
           Limpar
-        </button>
+        </Button>
       </div>
 
       {/* Content */}
@@ -90,18 +83,8 @@ function TabButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      role="tab"
-      aria-selected={active}
-      className={[
-        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
-        active
-          ? "bg-bg-primary text-text-primary"
-          : "text-text-secondary hover:text-text-primary",
-      ].join(" ")}
-    >
+    <Button size="sm" role="tab" aria-selected={active} aria-pressed={active} onClick={onClick}>
       {children}
-    </button>
+    </Button>
   );
 }

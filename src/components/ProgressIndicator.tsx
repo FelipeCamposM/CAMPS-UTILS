@@ -1,3 +1,6 @@
+import { LoaderCircle } from "lucide-react";
+import { useEnter } from "../lib/motion";
+
 interface ProgressIndicatorProps {
   steps: string[];
   currentStep: number;
@@ -5,36 +8,22 @@ interface ProgressIndicatorProps {
 
 export function ProgressIndicator({ steps, currentStep }: ProgressIndicatorProps) {
   const label = steps[currentStep] ?? steps[0];
+  const ref = useEnter<HTMLDivElement>();
 
   return (
     <div
+      ref={ref}
       role="status"
       aria-live="polite"
       aria-label={`Conversão em andamento: ${label}`}
-      className="flex flex-col items-center gap-6 py-8"
+      className="glass flex flex-col items-center gap-6 py-8"
     >
-      <div className="relative w-12 h-12">
-        <svg
-          className="animate-spin w-12 h-12 text-accent"
-          viewBox="0 0 48 48"
-          fill="none"
+      <div className="relative w-12 h-12 animate-float">
+        <LoaderCircle
+          strokeWidth={2.5}
           aria-hidden="true"
-        >
-          <circle
-            cx="24"
-            cy="24"
-            r="20"
-            stroke="currentColor"
-            strokeOpacity="0.15"
-            strokeWidth="4"
-          />
-          <path
-            d="M44 24a20 20 0 01-20 20"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-          />
-        </svg>
+          className="animate-spin w-12 h-12 text-accent"
+        />
       </div>
 
       <div className="text-center space-y-1">

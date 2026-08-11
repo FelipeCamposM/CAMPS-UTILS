@@ -1,19 +1,29 @@
 import { useState, useCallback, useEffect } from "react";
 import type { SelectedFile } from "../types/conversion";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from "../types/settings";
+import { DEFAULT_SETTINGS } from "../types/settings";
 
 interface UseDragDropOptions {
   onFiles: (files: SelectedFile[]) => void;
   onError: (message: string) => void;
   /** Extensões aceitas, minúsculas, sem ponto. Default: ["pdf"]. */
   accept?: string[];
+  /** Limite por arquivo em MB (vem das configurações). */
+  maxSizeMb?: number;
 }
 
-export function useDragDrop({ onFiles, onError, accept = ["pdf"] }: UseDragDropOptions) {
+export function useDragDrop({
+  onFiles,
+  onError,
+  accept = ["pdf"],
+  maxSizeMb = DEFAULT_SETTINGS.maxFileSizeMb,
+}: UseDragDropOptions) {
   const [isDragging, setIsDragging] = useState(false);
 
+  // `["*"]` = aceita qualquer arquivo (ex.: Hash / Checksum). Sem este caso o
+  // filtro viraria endsWith(".*"), que nunca casa, e todo drop seria recusado.
   const matches = useCallback(
-    (name: string) => accept.some((ext) => name.toLowerCase().endsWith(`.${ext}`)),
+    (name: string) =>
+      accept.includes("*") || accept.some((ext) => name.toLowerCase().endsWith(`.${ext}`)),
     [accept]
   );
 
@@ -94,8 +104,8 @@ export function useDragDrop({ onFiles, onError, accept = ["pdf"] }: UseDragDropO
           skipped++;
           continue;
         }
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          onError(`"${file.name}" muito grande. Máx. ${MAX_FILE_SIZE_MB} MB.`);
+        if (file.size > maxSizeMb * 1024 * 1024) {
+          onError(`"${file.name}" muito grande. Máx. ${maxSizeMb} MB.`);
           continue;
         }
         valid.push({
@@ -108,7 +118,7 @@ export function useDragDrop({ onFiles, onError, accept = ["pdf"] }: UseDragDropO
       if (skipped > 0) onError(rejectedMsg(skipped));
       if (valid.length > 0) onFiles(valid);
     },
-    [matches, rejectedMsg, onFiles, onError]
+    [matches, rejectedMsg, onFiles, onError, maxSizeMb]
   );
 
   return { isDragging, handleDragOver, handleDragLeave, handleDrop };

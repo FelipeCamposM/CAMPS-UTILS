@@ -7,16 +7,16 @@ import {
   removeHistoryEntry,
 } from "../services/historyService";
 
-export function useHistory() {
+export function useHistory(maxEntries?: number) {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
 
   const addEntry = useCallback((entry: HistoryEntry) => {
     setHistory((prev) => {
-      const updated = addHistoryEntry(prev, entry);
+      const updated = addHistoryEntry(prev, entry, maxEntries);
       saveHistory(updated);
       return updated;
     });
-  }, []);
+  }, [maxEntries]);
 
   const deleteEntry = useCallback((id: string) => {
     setHistory((prev) => {

@@ -140,6 +140,44 @@ export async function resizeImages(args: ResizeArgs): Promise<string[]> {
   });
 }
 
+export type CompressFormat = "manter" | "webp" | "jpg";
+export type CompressMode = "qualidade" | "tamanho";
+
+export interface CompressArgs {
+  inputs: string[];
+  outDir: string;
+  format: CompressFormat;
+  mode: CompressMode;
+  /** Modo "qualidade": valor fixo. Modo "tamanho": teto da busca binária. */
+  quality?: number;
+  /** Modo "tamanho": limite por arquivo em KB. */
+  targetKb?: number;
+}
+
+export interface CompressResult {
+  input: string;
+  output: string;
+  before: number;
+  after: number;
+  quality: number;
+  /** false = não coube no alvo nem na qualidade mínima (ou formato sem perdas). */
+  hitTarget: boolean;
+}
+
+/** Batch image compression by quality or target size (native Rust). */
+export async function compressImages(args: CompressArgs): Promise<CompressResult[]> {
+  return invoke<CompressResult[]>("compress_images", {
+    args: {
+      inputs: args.inputs,
+      out_dir: args.outDir,
+      format: args.format,
+      mode: args.mode,
+      quality: args.quality ?? null,
+      target_kb: args.targetKb ?? null,
+    },
+  });
+}
+
 export interface YoutubeResult {
   success: boolean;
   outputs?: string[];
@@ -237,24 +275,6 @@ export async function videoToGif(
   });
 }
 
-/** Downloads a Spotify track/album/playlist (Spotify metadata → YouTube audio). */
-export async function downloadSpotify(
-  url: string,
-  outputDir: string,
-  audioKbps?: number,
-  clientId?: string,
-  clientSecret?: string
-): Promise<YoutubeResult> {
-  const raw = await invoke<string>("download_spotify", {
-    url,
-    outputDir,
-    audioKbps: audioKbps ?? null,
-    clientId: clientId || null,
-    clientSecret: clientSecret || null,
-  });
-  return parseLastJson<YoutubeResult>(raw);
-}
-
 /** Whether the on-demand Docling module (PDF→Markdown) is ready. Always true in dev. */
 export async function doclingInstalled(): Promise<boolean> {
   return invoke<boolean>("docling_installed");
@@ -263,6 +283,314 @@ export async function doclingInstalled(): Promise<boolean> {
 /** Downloads + extracts the Docling module if missing. Progress via `docling-progress`. */
 export async function ensureDocling(): Promise<void> {
   await invoke("ensure_docling");
+}
+
+/**
+ * Whether ffmpeg/ffprobe are available. Saíram do instalador (168 MB crus) e
+ * vêm sob demanda — em dev resolvem de `src-tauri/binaries/` e isto dá true.
+ */
+export async function ffmpegInstalled(): Promise<boolean> {
+  return invoke<boolean>("ffmpeg_installed");
+}
+
+/** Downloads + extracts ffmpeg/ffprobe if missing. Progress via `ffmpeg-progress`. */
+export async function ensureFfmpeg(): Promise<void> {
+  await invoke("ensure_ffmpeg");
+}
+
+/** Whether the on-demand transcription module (faster-whisper) is ready. */
+export async function whisperInstalled(): Promise<boolean> {
+  return invoke<boolean>("whisper_installed");
+}
+
+/** Downloads + extracts the Whisper module. Progress via `whisper-progress`. */
+export async function ensureWhisper(): Promise<void> {
+  await invoke("ensure_whisper");
+}
+
+/** Whether the on-demand depth module (Depth Anything V2 / ONNX) is ready. */
+export async function depthInstalled(): Promise<boolean> {
+  return invoke<boolean>("depth_installed");
+}
+
+/** Downloads + extracts the depth module. Progress via `depth-progress`. */
+export async function ensureDepth(): Promise<void> {
+  await invoke("ensure_depth");
+}
+
+export interface DepthMapResult {
+  success: boolean;
+  /** PNG de rascunho em temp. Modo LA quando a entrada tinha transparência. */
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  hasAlpha?: boolean;
+  /** Execution provider do ONNX Runtime efetivamente usado. */
+  provider?: string;
+  model?: string;
+  durationMs?: number;
+  message?: string;
+  errorCode?: string;
+}
+
+/**
+ * Gera o mapa de profundidade. Carrega o modelo, infere e o descarta — o
+ * sidecar é um processo separado que morre no fim, então RAM e VRAM voltam ao
+ * sistema sem depender de coleta de lixo.
+ */
+export async function depthMap(inputPath: string, model?: string): Promise<DepthMapResult> {
+  return runTool<DepthMapResult>("depth_map", { inputPath, model });
+}
+
+export interface DepthAdjustArgs {
+  /** O rascunho devolvido por `depthMap`. */
+  inputPath: string;
+  outputPath: string;
+  invert?: boolean;
+  /** 1 = sem alteração. Mesma fórmula do `filter: contrast()` do CSS. */
+  contrast?: number;
+}
+
+/**
+ * Salva o mapa com inversão/contraste aplicados. Roda no sidecar light: não
+ * recarrega o modelo nem refaz inferência.
+ */
+export async function depthAdjust(args: DepthAdjustArgs): Promise<DepthMapResult> {
+  return runTool<DepthMapResult>("depth_adjust", args);
+}
+
+export type WhisperModelSize = "tiny" | "base" | "small" | "medium" | "large-v3";
+export type SubtitleFormat = "srt" | "vtt" | "ass";
+export type SubtitleStyle = "classico" | "youtube" | "karaoke" | "minimalista" | "neon";
+
+/**
+ * Espelho de `ESTILOS` em `python/subtitles.py` — mexeu num, mexa no outro.
+ * A descrição fica só aqui porque é texto de interface.
+ */
+export const SUBTITLE_STYLES: { value: SubtitleStyle; label: string; descricao: string }[] = [
+  { value: "classico", label: "Clássico", descricao: "Branco com contorno preto, no rodapé." },
+  { value: "youtube", label: "YouTube", descricao: "Caixa escura atrás do texto." },
+  { value: "karaoke", label: "Karaokê", descricao: "Roxo, centralizado, com salto ao aparecer." },
+  { value: "minimalista", label: "Minimalista", descricao: "Fino, sem contorno, discreto." },
+  { value: "neon", label: "Neon", descricao: "Contorno roxo brilhando." },
+];
+
+export interface SubtitleColors {
+  /** Cor do texto. */
+  cor: string;
+  contorno: string;
+  /** Palavra acesa no karaokê. */
+  destaque: string;
+  /** Caixa atrás do texto (só o preset YouTube usa). */
+  caixa: string;
+}
+
+/**
+ * Cores padrão de cada preset — espelho de `ESTILOS` em `python/subtitles.py`,
+ * já em `#RRGGBB`. É a fonte única da prévia e dos seletores de cor.
+ *
+ * O Python guarda em `&HAABBGGRR` (BGR, alfa invertido) e converte na entrada;
+ * aqui tudo é hex normal para o `<input type="color">` funcionar direto.
+ */
+export const SUBTITLE_STYLE_COLORS: Record<SubtitleStyle, SubtitleColors> = {
+  classico: { cor: "#FFFFFF", contorno: "#000000", destaque: "#FFD24A", caixa: "#000000" },
+  youtube: { cor: "#FFFFFF", contorno: "#000000", destaque: "#FFD24A", caixa: "#000000" },
+  karaoke: { cor: "#FFFFFF", contorno: "#A855F7", destaque: "#FFD24A", caixa: "#000000" },
+  minimalista: { cor: "#FFFFFF", contorno: "#000000", destaque: "#FFD24A", caixa: "#000000" },
+  neon: { cor: "#FFFFFF", contorno: "#8300FF", destaque: "#FFD24A", caixa: "#000000" },
+};
+
+/** Distância RGB entre duas cores `#RRGGBB`. */
+export function distanciaCor(a: string, b: string): number {
+  const rgb = (h: string) => {
+    const s = h.replace("#", "");
+    return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16));
+  };
+  const [r1, g1, b1] = rgb(a);
+  const [r2, g2, b2] = rgb(b);
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+
+/**
+ * Abaixo disto a cor some dentro da outra. É a mesma regra travada por teste em
+ * `python/test_subtitles.py` — o app avisa em vez de deixar gerar ilegível.
+ */
+export const DISTANCIA_MINIMA_COR = 120;
+
+/** Espelho de `RITMOS` em `python/subtitles.py`. */
+export type SubtitleRhythm = "classica" | "curta" | "tiktok";
+
+export const SUBTITLE_RHYTHMS: { value: SubtitleRhythm; label: string; descricao: string }[] = [
+  { value: "classica", label: "Clássica", descricao: "Até 2 linhas, como legenda de filme." },
+  { value: "curta", label: "Curta", descricao: "Uma linha por vez, lê mais rápido." },
+  { value: "tiktok", label: "Dinâmica", descricao: "1 a 3 palavras por vez, ritmo de redes." },
+];
+
+/** Alinhamento numpad do ASS: 2 = base, 5 = meio, 8 = topo. */
+export type SubtitlePosition = 2 | 5 | 8;
+
+export const SUBTITLE_POSITIONS: { value: SubtitlePosition; label: string }[] = [
+  { value: 2, label: "Rodapé" },
+  { value: 5, label: "Meio" },
+  { value: 8, label: "Topo" },
+];
+
+/** Famílias de fonte instaladas no Windows. Lista do registro, via Rust. */
+export async function systemFonts(): Promise<string[]> {
+  return invoke<string[]>("system_fonts");
+}
+
+export interface BurnSubtitlesArgs {
+  input: string;
+  /** Caminho do .ass (ou .srt) já gerado. */
+  subtitles: string;
+  output: string;
+  /** true = queima na imagem (recodifica); false = grava como faixa. */
+  burn?: boolean;
+  crf?: number;
+}
+
+/**
+ * Grava a legenda no vídeo. Progresso real via `tool-progress` (o ffmpeg
+ * reporta `out_time_us`).
+ *
+ * Queimar recodifica o vídeo inteiro — é a operação mais lenta do app. Como
+ * faixa é instantâneo, mas Instagram e TikTok ignoram legenda em faixa.
+ */
+export async function burnSubtitles(args: BurnSubtitlesArgs): Promise<string> {
+  return invoke<string>("burn_subtitles", { args });
+}
+
+/** Codec que será usado ao queimar. Detectado uma vez e cacheado no Rust. */
+export async function videoEncoder(): Promise<string> {
+  return invoke<string>("video_encoder");
+}
+
+/** Nome legível do encoder, para a interface. */
+export function nomeDoEncoder(codec: string): string {
+  const mapa: Record<string, string> = {
+    h264_nvenc: "placa NVIDIA",
+    h264_qsv: "gráficos Intel",
+    h264_amf: "placa AMD",
+    libx264: "processador",
+  };
+  return mapa[codec] ?? codec;
+}
+
+export interface TranscribeArgs {
+  inputPath: string;
+  outputPath: string;
+  /** "pt" por padrão — a autodetecção confunde português com espanhol. */
+  language?: string;
+  model?: WhisperModelSize;
+  format?: SubtitleFormat;
+  /** Quantas palavras cabem em cada bloco. Vale para todos os formatos. */
+  rhythm?: SubtitleRhythm;
+  /* Os campos abaixo só valem com `format: "ass"` — é o único que carrega
+     estilo. Ausentes, o preset decide. */
+  style?: SubtitleStyle;
+  font?: string;
+  /** Medido contra uma tela de 1080 de altura (o `PlayResY` do ASS). */
+  size?: number;
+  alignment?: SubtitlePosition;
+  /** Distância da borda, na mesma escala de 1080. `0` é válido. */
+  marginV?: number;
+  /** Acende a palavra sendo dita. Exige tempo por palavra (já temos). */
+  karaoke?: boolean;
+  /* Cores em `#RRGGBB`. Ausentes, valem as do preset. A conversão para o
+     formato do ASS acontece no Python (`hex_para_ass`). */
+  color?: string;
+  outlineColor?: string;
+  highlightColor?: string;
+  boxColor?: string;
+}
+
+export interface TranscribeResult {
+  success: boolean;
+  outputPath?: string;
+  durationMs?: number;
+  language?: string;
+  /** Blocos finais de legenda, já segmentados. A Fase C edita isto. */
+  segments?: { start: number; end: number; text: string }[];
+  text?: string;
+  errorCode?: string;
+  message?: string;
+}
+
+export interface RestyleArgs {
+  /** .srt/.vtt já existente. */
+  inputPath: string;
+  /** .ass de saída. */
+  outputPath: string;
+  style?: SubtitleStyle;
+  font?: string;
+  size?: number;
+  alignment?: SubtitlePosition;
+  marginV?: number;
+  color?: string;
+  outlineColor?: string;
+  boxColor?: string;
+}
+
+/**
+ * Converte uma legenda pronta em `.ass` estilizado.
+ *
+ * É o caminho "revisei o .srt à mão e agora quero gravá-lo no vídeo": sem isto
+ * a legenda importada só poderia ser queimada crua, porque estilo só existe no
+ * .ass. Roda no bundle light — só mexe em texto, não carrega o Whisper.
+ */
+export async function restyleSubtitles(args: RestyleArgs): Promise<TranscribeResult> {
+  return runTool<TranscribeResult>("restyle", args);
+}
+
+export interface SubtitleSegment {
+  start: number;
+  end: number;
+  text: string;
+  /** Tempo por palavra do Whisper. Sai do ar se o texto for editado. */
+  words?: { start: number; end: number; word: string }[];
+}
+
+export interface WriteSubtitlesArgs {
+  segments: SubtitleSegment[];
+  outputPath: string;
+  format: SubtitleFormat;
+  style?: SubtitleStyle;
+  font?: string;
+  size?: number;
+  alignment?: SubtitlePosition;
+  marginV?: number;
+  karaoke?: boolean;
+  color?: string;
+  outlineColor?: string;
+  highlightColor?: string;
+  boxColor?: string;
+}
+
+/** Lê .srt/.vtt e devolve os blocos, sem gravar nada. Para alimentar o editor. */
+export async function readSubtitles(inputPath: string): Promise<TranscribeResult> {
+  return runTool<TranscribeResult>("subtitle_read", { inputPath });
+}
+
+/**
+ * Grava a legenda a partir dos blocos editados na interface.
+ *
+ * É o passo que fecha o editor: sem ele, corrigir uma palavra exigiria
+ * transcrever tudo de novo (perdendo a correção) ou abrir o .srt fora do app.
+ * Roda no bundle light — não carrega o Whisper.
+ */
+export async function writeSubtitles(args: WriteSubtitlesArgs): Promise<TranscribeResult> {
+  return runTool<TranscribeResult>("subtitle_write", args);
+}
+
+/** Transcreve áudio/vídeo em legenda. Progresso real via evento `tool-progress`. */
+export async function transcribe(args: TranscribeArgs): Promise<TranscribeResult> {
+  return runTool<TranscribeResult>("transcribe", {
+    language: "pt",
+    model: "small",
+    format: "srt",
+    ...args,
+  });
 }
 
 export async function saveMarkdown(

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { downloadYoutube, youtubeInfo, openFolder } from "../../services/conversionService";
+import { downloadYoutube, youtubeInfo } from "../../services/conversionService";
 import type { YoutubeMode, YoutubeInfo } from "../../services/conversionService";
 import type { ToolProps } from "../registry";
+import { useToolEnter } from "../../lib/motion";
+import { Button, Field, Input, ResultPanel, SegmentedControl, Select, Slider } from "../../components/ui";
 
 const MODES: { value: YoutubeMode; label: string }[] = [
   { value: "audio", label: "Música (MP3)" },
@@ -30,11 +32,11 @@ type YoutubeEvent =
   | { type: "tracks"; tracks: { i: number; title: string }[] }
   | { type: "track"; i: number; status: TrackStatus };
 
-export function YoutubeTool({ addHistory }: ToolProps) {
+export function YoutubeTool({ settings, addHistory }: ToolProps) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<YoutubeMode>("audio");
-  const [kbps, setKbps] = useState(192);
-  const [maxHeight, setMaxHeight] = useState(0); // 0 = melhor
+  const [kbps, setKbps] = useState(settings.audioKbps);
+  const [maxHeight, setMaxHeight] = useState(settings.videoMaxHeight); // 0 = melhor
   const [info, setInfo] = useState<YoutubeInfo | null>(null);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -123,40 +125,38 @@ export function YoutubeTool({ addHistory }: ToolProps) {
     }
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
+    <div ref={toolRef} className="space-y-4">
       <div className="space-y-1.5">
         <label htmlFor="yt-url" className="text-text-secondary text-xs font-medium">
           URL do YouTube
         </label>
         <div className="flex gap-2">
-          <input
+          <Input
             id="yt-url"
+            className="flex-1 min-w-0"
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="https://www.youtube.com/watch?v=…"
-            className="flex-1 rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           />
-          <button
-            onClick={handleSearch}
-            disabled={!url.trim() || searching}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-elevated transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          >
+          <Button onClick={handleSearch} disabled={!url.trim()} loading={searching}>
             {searching ? "Buscando…" : "Buscar"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Preview */}
       {info && (
-        <div className="flex gap-3 rounded-xl border border-border-subtle bg-bg-surface p-3">
+        <div className="flex gap-3 glass p-3">
           {info.thumbnail && (
             <img
               src={info.thumbnail}
               alt={info.title}
-              className="w-32 h-20 object-cover rounded-lg bg-bg-elevated shrink-0"
+              className="w-32 h-20 object-cover rounded-lg bg-overlay/[0.06] shrink-0"
             />
           )}
           <div className="min-w-0 flex flex-col justify-center">
@@ -174,73 +174,52 @@ export function YoutubeTool({ addHistory }: ToolProps) {
         </div>
       )}
 
-      {/* Mode */}
-      <div className="flex gap-2">
-        {MODES.map((m) => (
-          <button
-            key={m.value}
-            onClick={() => setMode(m.value)}
-            className={[
-              "flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
-              mode === m.value
-                ? "bg-accent text-white"
-                : "border border-border-subtle text-text-secondary hover:bg-bg-elevated",
-            ].join(" ")}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <div className="glass rounded-glass p-4 space-y-3">
+        <SegmentedControl options={MODES} value={mode} onChange={setMode} />
 
-      {/* Qualidade */}
-      {isAudio ? (
-        <div className="space-y-1.5">
-          <label htmlFor="yt-kbps" className="text-text-secondary text-xs font-medium">
-            Qualidade do áudio: {kbps} kbps
-          </label>
-          <input
+        {isAudio ? (
+          <Slider
+            inline
+            size="sm"
             id="yt-kbps"
-            type="range"
+            label="Qualidade do áudio"
+            unit=" kbps"
             min={64}
             max={320}
             step={32}
             value={kbps}
-            onChange={(e) => setKbps(Number(e.target.value))}
-            className="w-full accent-accent"
+            onChange={setKbps}
           />
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          <label htmlFor="yt-quality" className="text-text-secondary text-xs font-medium">
-            Qualidade do vídeo
-          </label>
-          <select
-            id="yt-quality"
-            value={maxHeight}
-            onChange={(e) => setMaxHeight(Number(e.target.value))}
-            className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            <option value={0}>Melhor disponível</option>
-            {heights.map((h) => (
-              <option key={h} value={h}>{h}p</option>
-            ))}
-          </select>
-        </div>
-      )}
+        ) : (
+          <Field label="Qualidade do vídeo" htmlFor="yt-quality">
+            <Select
+              id="yt-quality"
+              value={maxHeight}
+              options={[
+                { value: 0, label: "Melhor disponível" },
+                ...heights.map((h) => ({ value: h, label: `${h}p` })),
+              ]}
+              onChange={setMaxHeight}
+            />
+          </Field>
+        )}
+      </div>
 
-      <button
+      <Button
+        variant="primary"
+        className="w-full"
         onClick={handleDownload}
-        disabled={!url.trim() || busy}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        disabled={!url.trim()}
+        loading={busy}
       >
         {busy ? "Baixando…" : "Baixar e salvar…"}
-      </button>
+      </Button>
 
       {busy && (
         <div className="space-y-1">
-          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
+          <div className="glass-inset h-2 rounded-full overflow-hidden">
             <div
-              className="h-full bg-accent transition-all"
+              className="shimmer h-full bg-accent transition-all duration-300"
               style={{ width: `${progress}%` }}
               role="progressbar"
               aria-valuenow={progress}
@@ -257,7 +236,7 @@ export function YoutubeTool({ addHistory }: ToolProps) {
       {/* Playlist: fila à esquerda, prontas à direita */}
       {mode === "playlist_audio" && tracks.length > 0 && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border-subtle bg-bg-surface p-3 space-y-1.5">
+          <div className="glass p-3 space-y-1.5">
             <p className="text-text-secondary text-xs font-medium">
               Na fila ({tracks.filter((t) => t.status === "pending" || t.status === "downloading").length})
             </p>
@@ -271,7 +250,7 @@ export function YoutubeTool({ addHistory }: ToolProps) {
                         t.status === "downloading"
                           ? "w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"
                           : t.status === "skipped"
-                          ? "w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+                          ? "w-1.5 h-1.5 rounded-full bg-danger shrink-0"
                           : "w-1.5 h-1.5 rounded-full bg-border shrink-0"
                       }
                     />
@@ -279,7 +258,7 @@ export function YoutubeTool({ addHistory }: ToolProps) {
                       className={[
                         "truncate",
                         t.status === "downloading" ? "text-text-primary" : "text-text-muted",
-                        t.status === "skipped" ? "line-through text-red-400" : "",
+                        t.status === "skipped" ? "line-through text-danger" : "",
                       ].join(" ")}
                       title={t.title}
                     >
@@ -290,8 +269,8 @@ export function YoutubeTool({ addHistory }: ToolProps) {
             </ul>
           </div>
 
-          <div className="rounded-xl border border-green-900/40 bg-green-950/10 p-3 space-y-1.5">
-            <p className="text-green-400 text-xs font-medium">
+          <div className="rounded-xl border border-success/40 bg-success/10 p-3 space-y-1.5">
+            <p className="text-success text-xs font-medium">
               Baixadas ({tracks.filter((t) => t.status === "done").length})
             </p>
             <ul className="space-y-1 max-h-56 overflow-y-auto">
@@ -299,7 +278,7 @@ export function YoutubeTool({ addHistory }: ToolProps) {
                 .filter((t) => t.status === "done")
                 .map((t) => (
                   <li key={t.i} className="flex items-center gap-1.5 text-[11px] text-text-secondary">
-                    <span className="text-green-500 shrink-0">✓</span>
+                    <span className="text-success shrink-0">✓</span>
                     <span className="truncate" title={t.title}>{t.title}</span>
                   </li>
                 ))}
@@ -310,8 +289,8 @@ export function YoutubeTool({ addHistory }: ToolProps) {
 
       {/* Resumo de puladas ao terminar */}
       {!busy && mode === "playlist_audio" && tracks.some((t) => t.status === "skipped") && (
-        <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2">
-          <p className="text-amber-400 text-xs font-medium">
+        <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2">
+          <p className="text-warning text-xs font-medium">
             {tracks.filter((t) => t.status === "skipped").length} faixa(s) pulada(s) por erro:
           </p>
           <ul className="text-text-muted text-[11px] mt-1 space-y-0.5">
@@ -322,23 +301,9 @@ export function YoutubeTool({ addHistory }: ToolProps) {
         </div>
       )}
 
-      {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-      {outputs.length > 0 && (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-green-400 text-xs font-medium">{outputs.length} arquivo(s) baixado(s)</p>
-            <button onClick={() => openFolder(outputs[0])} className="text-accent text-xs hover:underline">
-              Abrir pasta
-            </button>
-          </div>
-          <ul className="text-text-muted text-[11px] space-y-0.5 max-h-32 overflow-y-auto">
-            {outputs.map((o) => (
-              <li key={o} className="truncate">{o}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ResultPanel paths={outputs} label={`${outputs.length} arquivo(s) baixado(s)`} />
 
       <p className="text-text-muted text-[11px]">
         Baixe apenas conteúdo que você tem direito de baixar.

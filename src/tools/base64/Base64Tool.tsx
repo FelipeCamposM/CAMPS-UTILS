@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useToolEnter } from "../../lib/motion";
+import { Button, Field, Textarea } from "../../components/ui";
 
 function encodeBase64(text: string): string {
   return btoa(unescape(encodeURIComponent(text)));
@@ -27,39 +29,31 @@ export function Base64Tool() {
     if (output) await navigator.clipboard.writeText(output);
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor="b64-input" className="text-text-secondary text-xs font-medium">
-          Entrada
-        </label>
-        <textarea
+    <div ref={toolRef} className="space-y-4">
+      <Field label="Entrada" htmlFor="b64-input">
+        <Textarea
           id="b64-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           rows={5}
           placeholder="Cole o texto ou o Base64 aqui…"
-          className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent resize-y"
         />
-      </div>
+      </Field>
 
       <div className="flex gap-2">
-        <button
-          onClick={() => run("encode")}
-          className="flex-1 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
+        <Button variant="primary" className="flex-1" onClick={() => run("encode")}>
           Codificar
-        </button>
-        <button
-          onClick={() => run("decode")}
-          className="flex-1 rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-elevated transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
+        </Button>
+        <Button className="flex-1" onClick={() => run("decode")}>
           Decodificar
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <p role="alert" className="text-red-400 text-xs">{error}</p>
+        <p role="alert" className="text-danger text-xs">{error}</p>
       )}
 
       {output && (
@@ -68,20 +62,16 @@ export function Base64Tool() {
             <label htmlFor="b64-output" className="text-text-secondary text-xs font-medium">
               Resultado
             </label>
-            <button
-              onClick={copyOutput}
-              className="text-accent text-xs hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-            >
+            <Button variant="ghost" size="sm" onClick={copyOutput}>
               Copiar
-            </button>
+            </Button>
           </div>
-          <textarea
+          <Textarea
             id="b64-output"
             aria-label="Resultado Base64"
             value={output}
             readOnly
             rows={5}
-            className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary resize-y"
           />
         </div>
       )}

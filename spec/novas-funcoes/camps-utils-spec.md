@@ -87,12 +87,14 @@ Detalhes de implementação do hook, hash, versionamento e fallback → §7.
 |---|---|---|
 | Base64 / texto encode/decode | **Frontend JS** (`btoa`/`atob`/`TextEncoder`) | zero backend |
 | Imagens → webp/png/jpg/ico | **Rust** (`image` + `ico`) | nativo, leve, sem startup Python |
-| Imagens: resize / comprimir | **Rust** (`image`) | mesmo motor nativo |
+| Imagens: resize | **Rust** (`image`) | mesmo motor nativo |
+| Imagens: comprimir (qualidade / tamanho-alvo) | **Rust** (`image` + `webp`) | busca binária em memória, sem crate nova |
 | QR code | **Rust** (`qrcode`) | trivial, nativo |
 | Hash / checksum | **Rust** (`sha2`) | nativo |
 | Áudio (mp3/wav/flac), vídeo→gif, comprimir vídeo | **Rust** spawna ffmpeg empacotado | ffmpeg já bundlado; reuso |
 | PDF → Markdown (existente) | **Python sidecar** (Docling) | mantido |
 | Markdown → PDF | **Python sidecar** (`markdown` + `xhtml2pdf`) | puro-python, sem deps nativas no Windows |
+| Word (.docx) → PDF | **Python sidecar** (`mammoth` + `xhtml2pdf`) | puro-python; Word/COM ou LibreOffice exigiriam instalação externa |
 | PDF juntar/dividir/comprimir | **Python sidecar** (`PyMuPDF`/`pikepdf`) | libs maduras |
 | YouTube (música/mp4/playlist) | **Python sidecar** (`yt-dlp`) + ffmpeg | padrão de mercado |
 
@@ -147,12 +149,28 @@ Categorias: **Documentos**, **Imagens**, **Mídia**, **Utilitários**.
 - Backend: **Rust** (`image` + `ico`).
 - Erros: `UNSUPPORTED_FORMAT`, `DECODE_FAILED`, `OUTPUT_ERROR`.
 
-#### Redimensionar / comprimir *(novo — F3)*
+#### Redimensionar *(novo — F3)*
 - Entrada: 1..N imagens.
 - Opções: largura/altura (manter proporção), % de escala, qualidade, renomear em lote (prefixo +
   numeração).
 - Saída: imagens processadas.
 - Backend: **Rust** (`image`).
+
+#### Comprimir *(novo — F3, tool próprio)*
+- Entrada: 1..N imagens.
+- Dois modos:
+  - **Qualidade** — valor fixo de 1 a 100.
+  - **Tamanho-alvo** — limite em KB por arquivo; o Rust faz **busca binária na qualidade** (≤ 8
+    encodes) e usa a maior que ainda cabe. Se nem a qualidade mínima couber, grava assim mesmo e
+    devolve `hitTarget: false` para a UI avisar.
+- Formato de saída: `Manter | WebP | JPG`.
+- Saída: imagens + relatório por arquivo (antes → depois, % economizado).
+- Backend: **Rust** (`compress_images`, helpers `encode_image`/`search_quality`).
+- **Política de PNG: nenhuma crate nova.** PNG/ICO/GIF/BMP/TIFF são sem perdas — `quality` não os
+  afeta, então a busca binária é pulada e a UI mostra um aviso sugerindo WebP. Descartados
+  `oxipng` (build mais lento), `mozjpeg`/`imagequant` (deps C pesadas no MSVC).
+- Duas guardas: arquivo já abaixo do alvo com "Manter" é copiado sem recodificar; e se o encode
+  ficar **maior** que o original no mesmo formato, o original é preservado.
 
 ### 4.3 Mídia
 

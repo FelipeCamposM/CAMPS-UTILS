@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { Image, ImageOff, X } from "lucide-react";
+import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { convertImages, openFolder } from "../../services/conversionService";
+import { convertImages } from "../../services/conversionService";
 import type { ImageConvertArgs } from "../../services/conversionService";
 import { useDragDrop } from "../../hooks/useDragDrop";
 import type { SelectedFile } from "../../types/conversion";
 import type { ToolProps } from "../registry";
+import { animateOut, revealMedia, useToolEnter } from "../../lib/motion";
+import { Button, ResultPanel, SegmentedControl, Slider } from "../../components/ui";
 
 type Format = ImageConvertArgs["format"];
 
@@ -18,10 +21,10 @@ const FORMATS: { value: Format; label: string }[] = [
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "bmp", "gif", "webp", "tiff", "ico"];
 
-export function ImageConvertTool({ addHistory }: ToolProps) {
+export function ImageConvertTool({ settings, addHistory }: ToolProps) {
   const [files, setFiles] = useState<SelectedFile[]>([]);
-  const [format, setFormat] = useState<Format>("webp");
-  const [quality, setQuality] = useState(85);
+  const [format, setFormat] = useState<Format>(settings.imageFormat);
+  const [quality, setQuality] = useState(settings.imageQuality);
   const [busy, setBusy] = useState(false);
   const [outputs, setOutputs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export function ImageConvertTool({ addHistory }: ToolProps) {
 
   const { isDragging, handleDragOver, handleDragLeave, handleDrop } = useDragDrop({
     accept: IMAGE_EXTS,
+    maxSizeMb: settings.maxFileSizeMb,
     onFiles: (fs) => { setDropError(null); addFiles(fs); },
     onError: setDropError,
   });
@@ -104,9 +108,11 @@ export function ImageConvertTool({ addHistory }: ToolProps) {
     }
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
-      {/* Drop zone */}
+    <div ref={toolRef} className="space-y-4">
+      {/* Drop zone — encolhe quando já há arquivos: a atenção vai p/ as miniaturas. */}
       <div
         role="button"
         tabIndex={0}
@@ -119,147 +125,165 @@ export function ImageConvertTool({ addHistory }: ToolProps) {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFiles(); }
         }}
         className={[
-          "rounded-xl border-2 border-dashed p-8 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
-          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+          "rounded-glass border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
+          files.length > 0 ? "p-5" : "p-10",
           isDragging
             ? "border-accent bg-accent/10"
-            : "border-border-subtle hover:border-border hover:bg-bg-elevated",
+            : "border-border-subtle hover:border-border hover:bg-overlay/[0.07]",
         ].join(" ")}
       >
-        <ImgIcon dragging={isDragging} />
+        <ImgIcon dragging={isDragging} small={files.length > 0} />
         <p className="text-text-primary text-sm font-medium">
-          {isDragging ? "Solte as imagens aqui" : "Arraste imagens aqui"}
+          {isDragging
+            ? "Solte as imagens aqui"
+            : files.length > 0
+              ? "Adicionar mais imagens"
+              : "Arraste imagens aqui"}
         </p>
-        <p className="text-text-muted text-xs">ou clique para selecionar — múltiplas</p>
+        {files.length === 0 && (
+          <p className="text-text-muted text-xs">ou clique para selecionar — múltiplas</p>
+        )}
       </div>
 
-      {dropError && <p role="alert" className="text-red-400 text-xs">{dropError}</p>}
+      {dropError && <p role="alert" className="text-danger text-xs">{dropError}</p>}
 
-      {/* Preview grid */}
       {files.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-text-secondary text-xs font-medium">
-              {files.length} imagem(ns)
-            </p>
-            <button
-              onClick={() => setFiles([])}
-              className="text-text-muted text-xs hover:text-red-400 transition-colors"
-            >
-              Limpar
-            </button>
-          </div>
-          <ul className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {files.map((f) => (
-              <li
-                key={f.path}
-                className="group relative rounded-lg border border-border-subtle bg-bg-surface overflow-hidden"
-              >
-                <img
-                  src={convertFileSrc(f.path)}
-                  alt={f.name}
-                  className="w-full h-20 object-cover bg-bg-elevated"
-                  loading="lazy"
-                />
-                <p className="text-text-muted text-[10px] px-1.5 py-1 truncate" title={f.name}>
-                  {f.name}
-                </p>
-                <button
-                  onClick={() => removeFile(f.path)}
-                  aria-label={`Remover ${f.name}`}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ImagePreviewGrid files={files} onRemove={removeFile} onClear={() => setFiles([])} />
       )}
 
-      {/* Format */}
-      <div className="space-y-2">
-        <span className="text-text-secondary text-xs font-medium">Formato de saída</span>
-        <div className="flex gap-2">
-          {FORMATS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFormat(f.value)}
-              className={[
-                "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
-                format === f.value
-                  ? "bg-accent text-white"
-                  : "border border-border-subtle text-text-secondary hover:bg-bg-elevated",
-              ].join(" ")}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {usesQuality && (
-        <div className="space-y-1.5">
-          <label htmlFor="img-quality" className="text-text-secondary text-xs font-medium">
-            Qualidade: {quality}
-          </label>
-          <input
+      {/* Opções — única superfície com backdrop-filter da tela. */}
+      <div className="glass rounded-glass p-4 space-y-3">
+        <SegmentedControl
+          label="Formato de saída"
+          options={FORMATS}
+          value={format}
+          onChange={setFormat}
+        />
+        {usesQuality && (
+          <Slider
+            inline
+            size="sm"
             id="img-quality"
-            type="range"
+            label="Qualidade"
             min={1}
             max={100}
             value={quality}
-            onChange={(e) => setQuality(Number(e.target.value))}
-            className="w-full accent-accent"
+            onChange={setQuality}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      <button
+      <Button
+        variant="primary"
+        className="w-full"
         onClick={handleConvert}
-        disabled={files.length === 0 || busy}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        disabled={files.length === 0}
+        loading={busy}
       >
         {busy ? "Convertendo…" : "Converter e salvar…"}
-      </button>
+      </Button>
 
-      {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-      {outputs.length > 0 && (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-green-400 text-xs font-medium">
-              {outputs.length} arquivo(s) gerado(s)
-            </p>
-            <button
-              onClick={() => openFolder(outputs[0])}
-              className="text-accent text-xs hover:underline"
-            >
-              Abrir pasta
-            </button>
-          </div>
-          <ul className="text-text-muted text-[11px] space-y-0.5 max-h-32 overflow-y-auto">
-            {outputs.map((o) => (
-              <li key={o} className="truncate">{o}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ResultPanel paths={outputs} />
     </div>
   );
 }
 
-function ImgIcon({ dragging }: { dragging: boolean }) {
+/**
+ * Grade de miniaturas. `object-contain` + xadrez em vez de `object-cover`:
+ * num conversor o que se quer conferir é a imagem inteira, não um recorte.
+ * Não mostra tamanho — SelectedFile.size vem 0 quando o arquivo veio do
+ * diálogo (só o drag&drop preenche), e "0 KB" é pior que nada.
+ */
+export function ImagePreviewGrid({
+  files,
+  onRemove,
+  onClear,
+}: {
+  files: SelectedFile[];
+  onRemove: (path: string) => void;
+  onClear: () => void;
+}) {
   return (
-    <svg
-      className={`w-8 h-8 transition-colors ${dragging ? "text-accent" : "text-text-muted"}`}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-text-secondary text-xs font-medium">{files.length} imagem(ns)</p>
+        <Button variant="ghost" size="sm" onClick={onClear}>
+          Limpar
+        </Button>
+      </div>
+      {/* Sem stagger na grade de propósito: ele re-dispara a cada remoção e a
+          grade inteira pisca. Cada miniatura entra sozinha no `onLoad` da
+          imagem (revealMedia) — a cascata sai de graça do tempo de decode. */}
+      <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {files.map((f) => (
+          <PreviewTile key={f.path} file={f} onRemove={() => onRemove(f.path)} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PreviewTile({ file, onRemove }: { file: SelectedFile; onRemove: () => void }) {
+  // .tiff e .ico estão em IMAGE_EXTS mas o WebView nem sempre decodifica.
+  const [broken, setBroken] = useState(false);
+  const tileRef = useRef<HTMLLIElement>(null);
+
+  return (
+    <li
+      ref={tileRef}
+      className="group relative glass-inset glass-hover overflow-hidden transition-shadow hover:shadow-glass"
     >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-    </svg>
+      <div className="checker aspect-square flex items-center justify-center">
+        {broken ? (
+          <ImageOff aria-hidden="true" className="w-7 h-7 text-text-muted" />
+        ) : (
+          <img
+            src={convertFileSrc(file.path)}
+            alt={file.name}
+            loading="lazy"
+            onLoad={(e) => revealMedia(e.currentTarget)}
+            onError={() => setBroken(true)}
+            className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-[1.04]"
+          />
+        )}
+      </div>
+      <p className="text-text-muted text-[11px] px-2 py-1.5 truncate" title={file.name}>
+        {file.name}
+      </p>
+
+      {/* O wrapper carrega a entrada do botão. Se as classes de transform
+          fossem no próprio .btn, as utilities do Tailwind sobrescreveriam o
+          transform da base e matariam a levitação/press dele. */}
+      <span className="absolute top-1.5 right-1.5 opacity-0 scale-75 transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100">
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Remover ${file.name}`}
+          onClick={() => animateOut(tileRef.current, onRemove)}
+          className="group/x !p-1.5 !rounded-full bg-black/55 !text-white hover:!bg-danger hover:!text-white"
+        >
+          <X
+            aria-hidden="true"
+            className="w-3.5 h-3.5 transition-transform duration-200 group-hover/x:rotate-90"
+          />
+        </Button>
+      </span>
+    </li>
+  );
+}
+
+function ImgIcon({ dragging, small }: { dragging: boolean; small?: boolean }) {
+  return (
+    <Image
+      strokeWidth={1.5}
+      aria-hidden="true"
+      className={[
+        "transition-all",
+        small ? "w-6 h-6" : "w-9 h-9",
+        dragging ? "text-accent animate-float" : "text-text-muted",
+      ].join(" ")}
+    />
   );
 }

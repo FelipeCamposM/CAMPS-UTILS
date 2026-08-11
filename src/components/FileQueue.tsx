@@ -1,5 +1,8 @@
+import { X } from "lucide-react";
 import type { FileItem } from "../types/conversion";
 import { PROGRESS_STEPS } from "../hooks/useConversion";
+import { useStagger } from "../lib/motion";
+import { Button } from "./ui";
 
 interface FileQueueProps {
   files: FileItem[];
@@ -24,38 +27,31 @@ export function FileQueue({
 }: FileQueueProps) {
   const pendingCount = files.filter((f) => f.status === "pending").length;
   const doneCount = files.filter((f) => f.status === "success" || f.status === "error").length;
+  const listRef = useStagger<HTMLUListElement>("li", [files.length]);
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-bg-surface overflow-hidden">
+    <div className="glass overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-bg-elevated">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-overlay/[0.06]">
         <p className="text-text-primary text-sm font-medium flex-1">
           {files.length} arquivo{files.length !== 1 ? "s" : ""}
         </p>
         <div className="flex items-center gap-1.5">
           {doneCount > 0 && (
-            <button
-              onClick={onClearDone}
-              disabled={isConverting}
-              className="px-2.5 py-1 rounded-md text-xs text-text-muted hover:text-text-primary hover:bg-border-subtle transition-colors disabled:opacity-40"
-            >
+            <Button variant="ghost" size="sm" onClick={onClearDone} disabled={isConverting}>
               Limpar concluídos
-            </button>
+            </Button>
           )}
           {pendingCount > 1 && (
-            <button
-              onClick={onConvertAll}
-              disabled={isConverting}
-              className="px-3 py-1 rounded-md text-xs font-medium bg-accent hover:bg-accent-hover text-white transition-colors disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-            >
+            <Button variant="primary" size="sm" onClick={onConvertAll} disabled={isConverting}>
               Converter todos ({pendingCount})
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* File list */}
-      <ul className="divide-y divide-border-subtle">
+      <ul ref={listRef} className="divide-y divide-border-subtle">
         {files.map((item) => (
           <FileRow
             key={item.id}
@@ -91,7 +87,7 @@ function FileRow({
     <li
       className={[
         "flex items-center gap-3 px-4 py-3 transition-colors",
-        active ? "bg-bg-elevated" : "hover:bg-bg-elevated/40",
+        active ? "bg-overlay/[0.06]" : "hover:bg-overlay/[0.07]",
         (item.status === "success" || item.status === "error") ? "cursor-pointer" : "",
       ].join(" ")}
       onClick={() => {
@@ -109,24 +105,26 @@ function FileRow({
 
       <div className="flex items-center gap-1 shrink-0">
         {item.status === "pending" && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onConvert(); }}
+          <Button
+            size="sm"
             disabled={isConverting}
-            className="px-2.5 py-1 rounded-md text-xs font-medium bg-accent/10 hover:bg-accent/20 text-accent transition-colors disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            onClick={(e) => { e.stopPropagation(); onConvert(); }}
           >
             Converter
-          </button>
+          </Button>
         )}
 
         {(item.status === "pending" || item.status === "error") && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            disabled={isConverting && item.status !== "error"}
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label="Remover arquivo"
-            className="p-1 rounded text-text-muted hover:text-text-primary transition-colors disabled:opacity-40"
+            disabled={isConverting && item.status !== "error"}
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="!p-1"
           >
-            <RemoveIcon />
-          </button>
+            <X className="w-4 h-4" aria-hidden="true" />
+          </Button>
         )}
       </div>
     </li>
@@ -145,10 +143,10 @@ function StatusLabel({ item }: { item: FileItem }) {
   }
   if (item.status === "success") {
     const secs = ((item.durationMs ?? 0) / 1000).toFixed(1);
-    return <p className="text-green-400 text-xs">Concluído em {secs}s</p>;
+    return <p className="text-success text-xs">Concluído em {secs}s</p>;
   }
   if (item.status === "error") {
-    return <p className="text-red-400 text-xs truncate">{item.errorMessage ?? "Erro na conversão"}</p>;
+    return <p className="text-danger text-xs truncate">{item.errorMessage ?? "Erro na conversão"}</p>;
   }
   return <p className="text-text-muted text-xs">Pendente</p>;
 }
@@ -157,8 +155,8 @@ function StatusDot({ status }: { status: FileItem["status"] }) {
   const colors: Record<FileItem["status"], string> = {
     pending: "bg-border",
     converting: "bg-accent animate-pulse",
-    success: "bg-green-500",
-    error: "bg-red-500",
+    success: "bg-success",
+    error: "bg-danger",
   };
   return (
     <span
@@ -168,10 +166,3 @@ function StatusDot({ status }: { status: FileItem["status"] }) {
   );
 }
 
-function RemoveIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-    </svg>
-  );
-}

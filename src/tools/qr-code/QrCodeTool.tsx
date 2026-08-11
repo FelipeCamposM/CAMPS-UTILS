@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
-import { generateQr, openFolder } from "../../services/conversionService";
+import { generateQr } from "../../services/conversionService";
+import type { ToolProps } from "../registry";
+import { useToolEnter } from "../../lib/motion";
+import { Button, Field, ResultPanel, Slider, Textarea } from "../../components/ui";
 
-export function QrCodeTool() {
+export function QrCodeTool({ settings }: ToolProps) {
   const [text, setText] = useState("");
-  const [size, setSize] = useState(512);
+  const [size, setSize] = useState(settings.qrSize);
   const [busy, setBusy] = useState(false);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,59 +34,48 @@ export function QrCodeTool() {
     }
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor="qr-text" className="text-text-secondary text-xs font-medium">
-          Texto ou URL
-        </label>
-        <textarea
+    <div ref={toolRef} className="space-y-4">
+      <Field label="Texto ou URL" htmlFor="qr-text">
+        <Textarea
           id="qr-text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
           placeholder="https://exemplo.com"
-          className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent resize-y"
         />
-      </div>
+      </Field>
 
-      <div className="space-y-1.5">
-        <label htmlFor="qr-size" className="text-text-secondary text-xs font-medium">
-          Tamanho: {size}px
-        </label>
-        <input
+      <div className="glass rounded-glass p-4">
+        <Slider
+          inline
+          size="sm"
           id="qr-size"
-          type="range"
+          label="Tamanho"
+          unit="px"
           min={128}
           max={1024}
           step={64}
           value={size}
-          onChange={(e) => setSize(Number(e.target.value))}
-          className="w-full accent-accent"
+          onChange={setSize}
         />
       </div>
 
-      <button
+      <Button
+        variant="primary"
+        className="w-full"
         onClick={handleGenerate}
-        disabled={!text.trim() || busy}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        disabled={!text.trim()}
+        loading={busy}
       >
         {busy ? "Gerando…" : "Gerar QR code e salvar…"}
-      </button>
+      </Button>
 
-      {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-      {resultPath && (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 flex items-center justify-between gap-2">
-          <p className="text-green-400 text-xs truncate">Salvo: {resultPath}</p>
-          <button
-            onClick={() => openFolder(resultPath)}
-            className="text-accent text-xs hover:underline shrink-0"
-          >
-            Abrir pasta
-          </button>
-        </div>
-      )}
+      {resultPath && <ResultPanel paths={[resultPath]} />}
     </div>
   );
 }

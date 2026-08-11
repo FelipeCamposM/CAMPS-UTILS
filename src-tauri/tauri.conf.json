@@ -1,6 +1,6 @@
 {
   "productName": "CAMPS-UTILS",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "identifier": "com.camps.utils",
   "build": {
     "frontendDist": "../dist",
@@ -23,10 +23,12 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: https://asset.localhost https://*.ytimg.com https://img.youtube.com https://*.ggpht.com",
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost https://*.ytimg.com https://img.youtube.com https://*.ggpht.com; connect-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost; media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; worker-src 'self' blob:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
@@ -43,9 +45,20 @@
     "externalBin": [
       "binaries/converter"
     ],
-    "resources": [
-      "binaries/ffmpeg.exe",
-      "binaries/ffprobe.exe"
-    ]
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "../assets/fonts": "fonts"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4NzgxMUIyMjBGN0FDMEMKUldRTXJQY2dzaEY0T0o5ZE1CWVpwcW8vQ3BXTVpaMGFpVC9XcktYKzZZcFFSRytZUTYvSzBOUW8K",
+      "endpoints": [
+        "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

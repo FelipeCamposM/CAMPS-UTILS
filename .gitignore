@@ -38,3 +38,10 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Instaladores gerados pelo build (copiados por scripts/collect-installers.mjs)
+installers/
+
+# Fontes das legendas: binarios baixados por `npm run fonts`
+assets/fonts/*.ttf
+assets/fonts/*.otf

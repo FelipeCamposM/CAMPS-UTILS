@@ -1,6 +1,9 @@
+import { Clock, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { HistoryEntry } from "../types/conversion";
 import { MarkdownViewer } from "./MarkdownViewer";
+import { useStagger } from "../lib/motion";
+import { Button, Input } from "./ui";
 
 interface HistoryViewProps {
   history: HistoryEntry[];
@@ -10,6 +13,21 @@ interface HistoryViewProps {
   onClear: () => void;
 }
 
+/** Casa o termo com nome, caminhos, ferramenta e conteúdo convertido. */
+function matches(entry: HistoryEntry, term: string): boolean {
+  const haystack = [
+    entry.filename,
+    entry.inputPath,
+    entry.outputPath,
+    entry.tool,
+    entry.markdown,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+  return haystack.includes(term);
+}
+
 export function HistoryView({
   history,
   selectedId,
@@ -17,12 +35,33 @@ export function HistoryView({
   onDelete,
   onClear,
 }: HistoryViewProps) {
-  const selected = history.find((e) => e.id === selectedId) ?? null;
+  const [term, setTerm] = useState("");
+  /** Só muda ao clicar em Buscar (ou Enter) — digitar não filtra. */
+  const [query, setQuery] = useState("");
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const normalized = query.trim().toLowerCase();
+  const visible = normalized
+    ? history.filter((e) => matches(e, normalized))
+    : history;
+
+  const selected = visible.find((e) => e.id === selectedId) ?? null;
+
+  function runSearch() {
+    setQuery(term);
+  }
+
+  function clearSearch() {
+    setTerm("");
+    setQuery("");
+  }
+
+  const listRef = useStagger<HTMLUListElement>("li", [query, history.length]);
 
   if (history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center gap-2">
-        <ClockIcon />
+        <Clock className="w-8 h-8 text-text-muted" aria-hidden="true" />
         <p className="text-text-secondary text-sm font-medium">Nenhuma conversão ainda</p>
         <p className="text-text-muted text-xs">
           As conversões aparecerão aqui automaticamente
@@ -35,29 +74,73 @@ export function HistoryView({
     <div className="flex gap-5 h-full">
       {/* List */}
       <div className="w-64 shrink-0 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <p className="text-text-secondary text-xs font-medium">
-            {history.length} conversõe{history.length !== 1 ? "s" : ""}
-          </p>
-          <button
-            onClick={onClear}
-            className="text-text-muted text-xs hover:text-red-400 transition-colors"
-          >
-            Limpar tudo
-          </button>
+        {/* Busca — dispara só no botão/Enter */}
+        <div className="space-y-1.5">
+          <div className="flex gap-1.5">
+            <Input
+              size="sm"
+              type="search"
+              value={term}
+              aria-label="Pesquisar no histórico"
+              placeholder="Pesquisar…"
+              onChange={(e) => setTerm(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+              className="flex-1 min-w-0"
+            />
+            <Button variant="primary" size="sm" className="shrink-0" onClick={runSearch}>
+              Buscar
+            </Button>
+          </div>
+          {normalized && (
+            <Button variant="ghost" size="sm" onClick={clearSearch}>
+              Limpar busca
+            </Button>
+          )}
         </div>
 
-        <ul className="space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {history.map((entry) => (
-            <HistoryItem
-              key={entry.id}
-              entry={entry}
-              active={entry.id === selectedId}
-              onSelect={() => onSelect(entry.id)}
-              onDelete={() => onDelete(entry.id)}
-            />
-          ))}
-        </ul>
+        <div className="flex items-center justify-between">
+          <p className="text-text-secondary text-xs font-medium">
+            {normalized
+              ? `${visible.length} de ${history.length}`
+              : `${history.length} conversõe${history.length !== 1 ? "s" : ""}`}
+          </p>
+          {confirmClear ? (
+            <span className="flex items-center gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => { onClear(); setConfirmClear(false); clearSearch(); }}
+              >
+                Confirmar
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmClear(false)}>
+                Cancelar
+              </Button>
+            </span>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => setConfirmClear(true)}>
+              Limpar tudo
+            </Button>
+          )}
+        </div>
+
+        {visible.length === 0 ? (
+          <p className="text-text-muted text-xs px-1 py-3">
+            Nenhuma conversão encontrada para “{query.trim()}”.
+          </p>
+        ) : (
+          <ul ref={listRef} className="space-y-1 overflow-y-auto max-h-[calc(100vh-240px)]">
+            {visible.map((entry) => (
+              <HistoryItem
+                key={entry.id}
+                entry={entry}
+                active={entry.id === selectedId}
+                onSelect={() => onSelect(entry.id)}
+                onDelete={() => onDelete(entry.id)}
+              />
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Detail */}
@@ -72,8 +155,8 @@ export function HistoryView({
                 className={[
                   "text-xs font-medium px-2 py-0.5 rounded-full border",
                   selected.success
-                    ? "text-green-400 bg-green-950/30 border-green-900/40"
-                    : "text-red-400 bg-red-950/30 border-red-900/40",
+                    ? "text-success bg-success/10 border-success/40"
+                    : "text-danger bg-danger/10 border-danger/40",
                 ].join(" ")}
               >
                 {selected.success ? "Sucesso" : "Erro"}
@@ -92,7 +175,7 @@ export function HistoryView({
                 onClear={() => {}}
               />
             ) : (
-              <div className="rounded-xl border border-border-subtle bg-bg-surface p-6 text-center">
+              <div className="glass p-6 text-center">
                 <p className="text-text-muted text-sm">Sem conteúdo disponível</p>
               </div>
             )}
@@ -126,7 +209,7 @@ function HistoryItem({
     <li
       className={[
         "group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
-        active ? "bg-bg-elevated" : "hover:bg-bg-elevated/60",
+        active ? "bg-overlay/[0.06]" : "hover:bg-overlay/[0.07]",
       ].join(" ")}
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
@@ -134,7 +217,7 @@ function HistoryItem({
     >
       <span
         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-          entry.success ? "bg-green-500" : "bg-red-500"
+          entry.success ? "bg-success" : "bg-danger"
         }`}
       />
       <div className="flex-1 min-w-0">
@@ -142,13 +225,15 @@ function HistoryItem({
         <p className="text-text-muted text-[10px]">{formatDate(entry.timestamp)}</p>
       </div>
       {hovered && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        <Button
+          variant="ghost"
+          size="sm"
           aria-label="Remover do histórico"
-          className="p-0.5 rounded text-text-muted hover:text-red-400 transition-colors"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="!p-1 hover:!text-danger"
         >
-          <TrashIcon />
-        </button>
+          <Trash2 className="w-4 h-4" aria-hidden="true" />
+        </Button>
       )}
     </li>
   );
@@ -170,18 +255,4 @@ function formatDate(timestamp: number): string {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-function ClockIcon() {
-  return (
-    <svg className="w-8 h-8 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
 
-function TrashIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
-    </svg>
-  );
-}

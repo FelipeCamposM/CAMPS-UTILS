@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { videoToGif, openFolder } from "../../services/conversionService";
+import { videoToGif } from "../../services/conversionService";
 import type { ToolProps } from "../registry";
+import { useToolEnter } from "../../lib/motion";
+import { Button, FilePicker, Field, Input, ResultPanel, Slider } from "../../components/ui";
 
 const VIDEO_EXTS = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v", "gif"];
 
-export function VideoToGifTool({ addHistory }: ToolProps) {
+export function VideoToGifTool({ settings, addHistory }: ToolProps) {
   const [input, setInput] = useState<string | null>(null);
-  const [fps, setFps] = useState(12);
-  const [width, setWidth] = useState(480);
+  const [fps, setFps] = useState(settings.gifFps);
+  const [width, setWidth] = useState(settings.gifWidth);
   const [start, setStart] = useState("");
   const [duration, setDuration] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,15 +28,6 @@ export function VideoToGifTool({ addHistory }: ToolProps) {
 
   function name(p: string) {
     return p.split(/[/\\]/).pop() ?? p;
-  }
-
-  async function pickFile() {
-    const picked = await open({ multiple: false, filters: [{ name: "Vídeos", extensions: VIDEO_EXTS }] });
-    if (typeof picked === "string") {
-      setInput(picked);
-      setResult(null);
-      setError(null);
-    }
   }
 
   async function handleConvert() {
@@ -72,68 +65,83 @@ export function VideoToGifTool({ addHistory }: ToolProps) {
     }
   }
 
+  const toolRef = useToolEnter();
+
   return (
-    <div className="space-y-4">
-      <button
-        onClick={pickFile}
-        className="w-full rounded-lg border border-dashed border-border-subtle px-4 py-3 text-sm text-text-muted hover:border-border hover:text-text-secondary hover:bg-bg-elevated transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+    <div ref={toolRef} className="space-y-4">
+      <FilePicker
+        accept={VIDEO_EXTS}
+        filterName="Vídeos"
+        maxSizeMb={settings.maxFileSizeMb}
+        onError={setError}
+        onPick={([p]) => { setInput(p); setResult(null); setError(null); }}
+        className="w-full"
       >
         {input ? name(input) : "Selecionar vídeo"}
-      </button>
+      </FilePicker>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="gif-fps" className="text-text-secondary text-xs font-medium">FPS: {fps}</label>
-          <input id="gif-fps" type="range" min={5} max={30} value={fps}
-            onChange={(e) => setFps(Number(e.target.value))} className="w-full accent-accent" />
+      <div className="glass rounded-glass p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Slider size="sm" id="gif-fps" label="FPS" min={5} max={30} value={fps} onChange={setFps} />
+          <Slider
+            size="sm"
+            id="gif-w"
+            label="Largura"
+            unit="px"
+            min={120}
+            max={1080}
+            step={40}
+            value={width}
+            onChange={setWidth}
+          />
         </div>
-        <div className="space-y-1.5">
-          <label htmlFor="gif-w" className="text-text-secondary text-xs font-medium">Largura: {width}px</label>
-          <input id="gif-w" type="range" min={120} max={1080} step={40} value={width}
-            onChange={(e) => setWidth(Number(e.target.value))} className="w-full accent-accent" />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Início (s) — opcional" htmlFor="gif-start">
+            <Input
+              id="gif-start"
+              type="number"
+              min={0}
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+          <Field label="Duração (s) — opcional" htmlFor="gif-dur">
+            <Input
+              id="gif-dur"
+              type="number"
+              min={0}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="tudo"
+            />
+          </Field>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="gif-start" className="text-text-secondary text-xs font-medium">Início (s) — opcional</label>
-          <input id="gif-start" type="number" min={0} value={start} onChange={(e) => setStart(e.target.value)}
-            placeholder="0"
-            className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="gif-dur" className="text-text-secondary text-xs font-medium">Duração (s) — opcional</label>
-          <input id="gif-dur" type="number" min={0} value={duration} onChange={(e) => setDuration(e.target.value)}
-            placeholder="tudo"
-            className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
-        </div>
-      </div>
-
-      <button
+      <Button
+        variant="primary"
+        className="w-full"
         onClick={handleConvert}
-        disabled={!input || busy}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        disabled={!input}
+        loading={busy}
       >
         {busy ? "Gerando GIF…" : "Gerar GIF e salvar…"}
-      </button>
+      </Button>
 
       {busy && (
         <div className="space-y-1">
-          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
-            <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} role="progressbar" aria-valuenow={progress} />
+          <div className="glass-inset h-2 rounded-full overflow-hidden">
+            <div className="shimmer h-full bg-accent transition-all duration-300" style={{ width: `${progress}%` }} role="progressbar" aria-valuenow={progress} />
           </div>
           <p className="text-text-muted text-[11px] text-center">{progress}%</p>
         </div>
       )}
 
-      {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-      {result && (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 flex items-center justify-between gap-2">
-          <p className="text-green-400 text-xs truncate">Salvo: {result}</p>
-          <button onClick={() => openFolder(result)} className="text-accent text-xs hover:underline shrink-0">Abrir pasta</button>
-        </div>
-      )}
+      {result && <ResultPanel paths={[result]} />}
     </div>
   );
 }

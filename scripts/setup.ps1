@@ -205,20 +205,33 @@ if (-not $SkipIcons) {
 
     if (-not (Test-Path $icoFile)) {
         Write-Step "Gerando icones do aplicativo..."
-        $tempIcon = "$Root\icon-source-temp.png"
+
+        # Arte oficial na raiz do repo. New-AppIcon so entra como plano B, em
+        # clone incompleto: o placeholder "C" nao e a marca do app.
+        # Sem travessao neste arquivo: ele nao tem BOM, o PS 5.1 le como ANSI e
+        # o "-" vira aspa curva, que FECHA a string e quebra o parser.
+        $artIcon  = "$Root\app-icon.png"
+        $tempIcon = $null
 
         try {
-            New-AppIcon -OutputPath $tempIcon
-            Write-OK "Icone fonte gerado (512x512 padrao)"
+            if (Test-Path $artIcon) {
+                $sourceIcon = $artIcon
+                Write-OK "Usando a arte do app: app-icon.png"
+            } else {
+                $tempIcon = "$Root\icon-source-temp.png"
+                New-AppIcon -OutputPath $tempIcon
+                $sourceIcon = $tempIcon
+                Write-Warn "app-icon.png nao encontrado. Gerando placeholder 512x512."
+            }
 
-            npx tauri icon $tempIcon
+            npx tauri icon $sourceIcon
             if ($LASTEXITCODE -ne 0) {
                 Write-Warn "Geracao de icones pelo Tauri falhou. O build de desenvolvimento ainda funciona sem icones."
             } else {
                 Write-OK "Todos os tamanhos de icone gerados em $iconsDir"
             }
         } finally {
-            Remove-Item $tempIcon -ErrorAction SilentlyContinue
+            if ($tempIcon) { Remove-Item $tempIcon -ErrorAction SilentlyContinue }
         }
     } else {
         Write-OK "Icones ja existem em $iconsDir"

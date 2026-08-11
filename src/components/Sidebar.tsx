@@ -1,45 +1,69 @@
+import { Clock, House, Settings } from "lucide-react";
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
 import { CATEGORY_ORDER, CATEGORY_LABELS, toolsByCategory } from "../tools/registry";
+import { useGlassSheen, useStagger } from "../lib/motion";
+import { NotificationBell } from "./NotificationBell";
+import type { SettingsSection } from "../hooks/useNotifications";
+/* O mesmo arquivo que o Tauri usa como ícone do app (tauri.conf.json →
+   bundle.icon). Importado em vez de copiado para src/assets: uma cópia
+   dessincronizaria do ícone real na próxima troca de marca. */
+import appIcon from "../../src-tauri/icons/128x128.png";
 
 interface SidebarProps {
   activeToolId: string | null;
   showHistory: boolean;
+  showSettings: boolean;
   onHome: () => void;
   onSelectTool: (id: string) => void;
   onOpenHistory: () => void;
-  onOpenSettings: () => void;
+  /** Sem argumento = seção padrão. O sino manda a seção da pendência. */
+  onOpenSettings: (secao?: SettingsSection) => void;
 }
 
 export function Sidebar({
   activeToolId,
   showHistory,
+  showSettings,
   onHome,
   onSelectTool,
   onOpenHistory,
   onOpenSettings,
 }: SidebarProps) {
-  const atHome = activeToolId === null && !showHistory;
+  const atHome = activeToolId === null && !showHistory && !showSettings;
+  const sheenRef = useGlassSheen<HTMLElement>();
+  const navRef = useStagger<HTMLElement>("[data-nav-item]");
 
   return (
-    <aside className="w-56 shrink-0 flex flex-col bg-bg-surface border-r border-border-subtle h-screen sticky top-0">
-      {/* Logo */}
-      <button
-        onClick={onHome}
-        className="px-4 py-5 border-b border-border-subtle text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
-            <LogoIcon />
+    <aside
+      ref={sheenRef}
+      className="glass glass-strong glass-sheen w-56 shrink-0 flex flex-col h-screen sticky top-0 rounded-none border-y-0 border-l-0"
+    >
+      {/* Logo + sino. O sino é irmão do botão, não filho: <button> dentro de
+          <button> é HTML inválido e o clique de um engole o do outro. */}
+      <div className="px-4 py-5 border-b border-border-subtle/60 flex items-center gap-2">
+        <button
+          onClick={onHome}
+          className="flex items-center gap-2.5 text-left min-w-0 flex-1 !rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <img
+            src={appIcon}
+            alt=""
+            aria-hidden="true"
+            className="neon-glow w-7 h-7 rounded-lg shrink-0 object-contain"
+          />
+          <div className="min-w-0">
+            <p className="text-text-primary text-xs font-semibold leading-tight truncate">CAMPS-UTILS</p>
+            <p className="text-text-muted text-[10px] leading-tight truncate">Utilitários locais</p>
           </div>
-          <div>
-            <p className="text-text-primary text-xs font-semibold leading-tight">CAMPS-UTILS</p>
-            <p className="text-text-muted text-[10px] leading-tight">Utilitários locais</p>
-          </div>
-        </div>
-      </button>
+        </button>
+
+        <NotificationBell onOpenSettings={onOpenSettings} />
+      </div>
 
       {/* Nav */}
-      <nav className="px-2 py-3 flex-1 min-h-0 overflow-y-auto space-y-3">
-        <NavItem active={atHome} onClick={onHome} icon={<HomeIcon />} label="Início" />
+      <nav ref={navRef} className="px-2 py-3 flex-1 min-h-0 overflow-y-auto space-y-3">
+        <NavItem active={atHome} onClick={onHome} icon={<House className="w-4 h-4" aria-hidden="true" />} label="Início" />
 
         {CATEGORY_ORDER.map((category) => {
           const tools = toolsByCategory(category);
@@ -64,15 +88,16 @@ export function Sidebar({
       </nav>
 
       {/* Footer */}
-      <div className="px-2 py-3 border-t border-border-subtle space-y-0.5">
-        <NavItem active={showHistory} onClick={onOpenHistory} icon={<HistoryIcon />} label="Histórico" />
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <GearIcon />
-          Configurações
-        </button>
+      <div className="px-2 py-3 border-t border-border-subtle/60 space-y-0.5">
+        <NavItem active={showHistory} onClick={onOpenHistory} icon={<Clock className="w-4 h-4" aria-hidden="true" />} label="Histórico" />
+        <NavItem
+          active={showSettings}
+          /* Seta explícita: passar `onOpenSettings` direto entregaria o
+             MouseEvent como se fosse a seção de destino. */
+          onClick={() => onOpenSettings()}
+          icon={<Settings className="w-4 h-4" aria-hidden="true" />}
+          label="Configurações"
+        />
       </div>
     </aside>
   );
@@ -89,50 +114,45 @@ function NavItem({
   icon: React.ReactNode;
   label: string;
 }) {
+  const barRef = useRef<HTMLSpanElement>(null);
+
+  // Barra de acento cresce ao virar ativo; some ao sair.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    gsap.to(bar, {
+      scaleY: active ? 1 : 0,
+      opacity: active ? 1 : 0,
+      duration: 0.32,
+      ease: active ? "back.out(2)" : "power2.in",
+    });
+  }, [active]);
+
   return (
     <button
+      data-nav-item
       onClick={onClick}
       className={[
-        "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+        "relative w-full flex items-center gap-2.5 px-3 py-2 !rounded-lg text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
         active
-          ? "bg-bg-elevated text-text-primary font-medium"
-          : "text-text-secondary hover:text-text-primary hover:bg-bg-elevated/50",
+          ? "glass glass-sheen text-text-primary font-medium"
+          : "text-text-secondary hover:text-text-primary hover:bg-overlay/[0.07]",
       ].join(" ")}
     >
-      <span className={active ? "text-accent" : ""}>{icon}</span>
+      <span
+        ref={barRef}
+        aria-hidden="true"
+        className={[
+          "absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full origin-center opacity-0 scale-y-0",
+          active ? "neon-bar" : "bg-border",
+        ].join(" ")}
+      />
+      <span className={active ? "neon" : ""}>{icon}</span>
       <span className="truncate">{label}</span>
     </button>
   );
 }
 
-function LogoIcon() {
-  return (
-    <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-    </svg>
-  );
-}
 
-function HomeIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-    </svg>
-  );
-}
 
-function HistoryIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clipRule="evenodd" />
-    </svg>
-  );
-}
 
-function GearIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path fillRule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 011.262.125l1.668 1.667a1 1 0 01.125 1.263l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 01.804.98v2.361a1 1 0 01-.804.98l-1.473.295a6.95 6.95 0 01-.587 1.416l.834 1.25a1 1 0 01-.125 1.262l-1.668 1.668a1 1 0 01-1.263.125l-1.25-.834a6.953 6.953 0 01-1.416.587l-.294 1.473a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.295-1.473a6.957 6.957 0 01-1.416-.587l-1.25.834a1 1 0 01-1.262-.125L1.95 15.348a1 1 0 01-.125-1.263l.834-1.25a6.957 6.957 0 01-.587-1.416l-1.473-.294A1 1 0 01.795 10.2V7.839a1 1 0 01.804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 01.125-1.262L4.617 1.97a1 1 0 011.263-.126l1.25.834a6.957 6.957 0 011.416-.587L8.84 1.804zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-    </svg>
-  );
-}
