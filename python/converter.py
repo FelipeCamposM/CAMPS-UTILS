@@ -828,6 +828,90 @@ def depth_adjust(
     }
 
 
+# ─── Remover fundo (u2net) ──────────────────────────────────────────────────
+REMBG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _dir_trabalho_rembg() -> Path:
+    """Onde vive o recorte antes de o usuário decidir salvar.
+
+    Temp, e com nome derivado da entrada: refazer sobrescreve em vez de
+    acumular lixo, como no mapa de profundidade.
+    """
+    d = Path(tempfile.gettempdir()) / "camps-utils" / "rembg"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def remove_bg(input_path: str | None) -> dict:
+    """Imagem → PNG com fundo transparente, 100% local.
+
+    Roda no bundle `rembg` (onnxruntime + numpy + Pillow), não no light.
+    Devolve o caminho de um **rascunho** em temp; salvar é cópia, feita pelo
+    Rust (`copy_file`), sem refazer a segmentação.
+    """
+    start = time.time()
+
+    if not input_path:
+        return make_error("INVALID_INPUT", "Nenhuma imagem informada.")
+    p = Path(input_path)
+    if not p.exists():
+        return make_error("FILE_NOT_FOUND", "Imagem não encontrada.")
+    if p.suffix.lower() not in REMBG_EXTS:
+        return make_error(
+            "INVALID_EXTENSION",
+            f"Formato não suportado: {p.suffix or 'sem extensão'}. Use PNG, JPG ou WebP.",
+        )
+
+    try:
+        import bgremove as bg_mod
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Módulo de remoção de fundo não encontrado.")
+
+    try:
+        recorte, provedor = bg_mod.remover_fundo(
+            str(p),
+            progresso=lambda pct: log(f"PROGRESS: {pct}"),
+            passo=lambda txt: log(f"STEP: {txt}"),
+        )
+    except MemoryError as e:
+        log(f"OUT_OF_MEMORY: {e}")
+        return make_error(
+            "OUT_OF_MEMORY",
+            "Memória insuficiente para esta imagem. Tente uma resolução menor.",
+        )
+    except OSError as e:
+        # Pillow levanta OSError para arquivo corrompido/truncado, e urllib para
+        # queda de rede no download do modelo. Separar dá a mensagem certa.
+        log(f"REMBG_IO_FAILED: {type(e).__name__}: {e}")
+        if not bg_mod.modelo_em_cache():
+            return make_error(
+                "MODEL_ERROR",
+                "Não foi possível baixar o modelo de recorte. Verifique a conexão.",
+            )
+        return make_error("INVALID_INPUT", "Não foi possível ler a imagem (arquivo corrompido?).")
+    except Exception as e:
+        log(f"REMBG_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível remover o fundo.")
+
+    try:
+        saida = _dir_trabalho_rembg() / f"{p.stem}-sem-fundo.png"
+        recorte.save(saida, "PNG")
+    except OSError as e:
+        log(f"OUTPUT_ERROR: {e}")
+        return make_error("OUTPUT_ERROR", "Não foi possível gravar o PNG.")
+
+    return {
+        "success": True,
+        "outputPath": str(saida),
+        "width": recorte.width,
+        "height": recorte.height,
+        "provider": provedor,
+        "durationMs": int((time.time() - start) * 1000),
+    }
+
+
 def _modelo_em_cache(model_size: str) -> bool:
     """Diz se o modelo do Whisper já está no cache da HuggingFace.
 
@@ -1471,6 +1555,9 @@ def dispatch(tool: str, data: dict) -> dict:
             data.get("inputPath", "").strip() or None,
             data.get("model", "").strip() or None,
         )
+
+    if tool == "remove_bg":
+        return remove_bg(data.get("inputPath", "").strip() or None)
 
     if tool == "depth_adjust":
         return depth_adjust(

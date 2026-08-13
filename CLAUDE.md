@@ -11,14 +11,15 @@ anote o que foi feito (com caminhos de arquivo) e os próximos passos, antes de 
 | Roadmap | Cobre |
 |---|---|
 | `roadmaps/new-functions/roadmap.md` | Fases 1–3: suíte, ferramentas, visual, módulos, updater. **Estado atual.** |
-| `roadmaps/ia-local/roadmap.md` | Fase 4 (planejada): legendas, voz, imagem com IA local. Prompt de arranque em `roadmaps/ia-local/PROMPT.md`. |
+| `roadmaps/removebg-vtracer-realesrgan/roadmap.md` | **Próxima entrega** (prioridade sobre a Fase 4): vetorizar (VTracer), aumentar qualidade (Real-ESRGAN), remover fundo (rembg). |
+| `roadmaps/ia-local/roadmap.md` | Fase 4 (**em espera**): legendas, voz, imagem com IA local. Prompt de arranque em `roadmaps/ia-local/PROMPT.md`. |
 
 A spec formal é `spec/novas-funcoes/camps-utils-spec.md`. Comece qualquer sessão lendo o roadmap da
 fase e este arquivo.
 
 ## What this is
 
-Local-only Windows desktop suite of 15 conversion/utility tools (PDF, images, audio/video,
+Local-only Windows desktop suite of 20 conversion/utility tools (PDF, images, audio/video,
 Base64/QR/hash) — nothing goes to the cloud except YouTube downloads and the on-demand
 module downloads. Tauri 2 shell (Rust) + React/TypeScript/Vite/Tailwind frontend + a Python sidecar
 for the heavy libraries. Tools are registered in `src/tools/registry.tsx` (single source of truth
@@ -130,6 +131,8 @@ tudo de novo). Ficam em Releases de depósito, verificados por SHA256, extraído
 | ffmpeg + ffprobe | `ffmpeg-v1` | `camps-ffmpeg.zip` (~59 MB) | `python build.py ffmpeg` |
 | Whisper (transcrição) | `whisper-v1` | `camps-whisper.zip` (~90 MB) | `python build.py whisper` |
 | Depth Anything V2 | `depth-v1` | `camps-depth.zip` (~48 MB) | `python build.py depth` |
+| Real-ESRGAN (upscale) | `realesrgan-v1` | `camps-realesrgan.zip` (~31 MB) | `python build.py realesrgan` |
+| rembg (remover fundo) | `rembg-v1` | `camps-rembg.zip` (~130 MB) | `python build.py rembg` |
 
 Trocar o conteúdo de um módulo exige: nova tag, novo zip, e **atualizar `url` e `sha256`** no
 `commands.rs`. O `marker` (arquivo que prova que está instalado) não tem versão no nome — se um dia
@@ -164,11 +167,13 @@ Conversion flow crosses three process boundaries. Follow it end to end before ch
 
 ### Rust commands (the whole native surface)
 
-25 registered in `src-tauri/src/lib.rs` (`generate_handler!`) — conversion (`convert_pdf`,
+32 registered in `src-tauri/src/lib.rs` (`generate_handler!`) — conversion (`convert_pdf`,
 `run_tool`), on-demand modules (`docling_installed`/`ensure_docling`,
-`ffmpeg_installed`/`ensure_ffmpeg`), media (`compress_video`, `convert_audio`, `video_to_gif`,
-`download_youtube`, `youtube_info`), native image/util work (`convert_images`,
-`resize_images`, `compress_images`, `generate_qr`, `hash_files`) and `save_markdown`/`open_folder`.
+`ffmpeg_installed`/`ensure_ffmpeg`, `realesrgan_installed`/`ensure_realesrgan`,
+`rembg_installed`/`ensure_rembg`), media
+(`compress_video`, `convert_audio`, `video_to_gif`, `download_youtube`, `youtube_info`), native
+image/util work (`convert_images`, `resize_images`, `compress_images`, `vectorize_image`,
+`upscale_image`, `generate_qr`, `hash_files`) and `copy_file`/`save_markdown`/`open_folder`.
 
 Adding a native capability means: new fn in `commands.rs` → register in `lib.rs`
 `generate_handler!` → matching wrapper in `conversionService.ts`. Permissions live in

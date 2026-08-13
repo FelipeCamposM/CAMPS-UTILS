@@ -532,11 +532,11 @@ ponta pelo contrato real do sidecar (subprocesso, uma linha JSON) nos 10 formato
 do app. Correlação |depth × grayscale da entrada| = **0,18** — prova de que não é a imagem
 dessaturada. Gradiente na silhueta 19,5 contra 1,0 no interior — borda preservada.
 
-- [ ] **`realesrgan-ncnn-vulkan`** — aumento de resolução com IA. **Binário ncnn, sem torch**,
-      chamado pelo Rust como o ffmpeg. Exige Vulkan; precisa de detecção e mensagem clara em
-      máquina sem suporte.
-- [ ] **`rembg`** — remoção de fundo (u2net, ONNX). O ONNX Runtime já é pago no módulo do Docling.
-      Era "fora de escopo" na spec original; o sistema de módulos ressuscitou.
+- [→] **Aumento de resolução com IA** e **remoção de fundo (`rembg`)** — **movidos em 2026-08-13**
+      para `roadmaps/removebg-vtracer-realesrgan/roadmap.md`, que tem prioridade sobre esta fase
+      e acrescenta vetorização (VTracer). Notas que continuam valendo: `realesrgan-ncnn-vulkan`
+      é binário ncnn **sem torch**, chamado pelo Rust como o ffmpeg, e exige Vulkan (detectar e
+      avisar em máquina sem suporte); o ONNX Runtime do `rembg` já é pago no módulo do Docling.
 - [ ] **`imagehash`** — hash perceptual para achar imagens duplicadas ou parecidas numa pasta.
       Leve. Categoria Utilitários.
 - [ ] Enquanto estiver em imagem: **remover EXIF** (Pillow puro, zero dependência) e

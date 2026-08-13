@@ -16,5 +16,14 @@ faster-whisper>=1.2
 onnxruntime>=1.17
 numpy>=1.24
 Pillow>=10.0
+# Remoção de fundo (u2net). Vai no bundle `rembg` (130 MB medidos), não no
+# light. Instalar com `--no-deps` na .venv: os extras dele puxariam outra versão
+# de numpy/onnxruntime por cima das que o Docling e o Depth já usam.
+# As dependências que o rembg realmente precisa vêm nas linhas seguintes.
+rembg>=2.0.78
+pymatting>=1.1
+pooch>=1.8
+jsonschema>=4.0
+scikit-image>=0.22
 pyinstaller>=6.0.0
 pytest>=8.0.0

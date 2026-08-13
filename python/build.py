@@ -50,11 +50,20 @@ LIGHT_COLLECTS = [
 ]
 
 
+# A pilha da remoção de fundo, vista de fora. `converter.py::remove_bg` faz
+# `import bgremove` DENTRO da função, e o PyInstaller segue isso: sem excluir,
+# todo bundle que não é o do rembg engordaria ~100 MB (numba, llvmlite,
+# pymatting, scipy) por causa de uma ferramenta que ele nunca executa.
+REMBG_STACK = [
+    "bgremove", "rembg", "pymatting", "numba", "llvmlite", "skimage",
+    "imageio", "tifffile", "networkx", "jsonschema", "pooch",
+]
+
 # O PyInstaller segue import dentro de função. `converter.py::depth_map` faz
 # `import depth`, e depth.py importa numpy + onnxruntime no topo — sem excluir o
 # próprio módulo `depth`, o instalador engordaria ~70 MB com a inferência que
 # nunca roda ali (o Rust manda `depth_map` para o sidecar `depth`).
-LIGHT_EXCLUDES = ["depth"]
+LIGHT_EXCLUDES = ["depth"] + REMBG_STACK
 
 
 # Arrastados transitivamente pelo yt-dlp e inúteis na transcrição.
@@ -72,6 +81,15 @@ DEPTH_EXCLUDES = [
     "faster_whisper", "ctranslate2", "av", "tokenizers",
     "pandas", "huggingface_hub", "hf_xet", "lxml",
     "pydantic", "pydantic_core", "safetensors",
+] + REMBG_STACK
+
+# O que o bundle do rembg PRECISA e portanto não pode ser excluído pelas listas
+# dos outros módulos. `requests`/`urllib3` estão aqui porque o pooch baixa os
+# pesos com eles — e `WHISPER_EXCLUDES` os exclui. Sem esta subtração o exe
+# compila e só falha em produção, na hora de baixar o modelo.
+REMBG_NEEDS = REMBG_STACK + [
+    "scipy", "onnxruntime", "numpy", "PIL",
+    "requests", "urllib3", "certifi", "charset_normalizer", "idna",
 ]
 
 
@@ -173,7 +191,7 @@ def build_whisper(triple: str) -> None:
     # onnxruntime`. A exclusão vence, e o exe morria em tempo de execução com
     # "Applying the VAD filter requires the onnxruntime package" — só no
     # empacotado, porque em dev a .venv tem tudo.
-    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + REMBG_STACK
                if m not in coletar]
 
     extra: list[str] = []
@@ -245,6 +263,51 @@ def build_depth(triple: str) -> None:
           "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> DEPTH.sha256")
 
 
+def build_rembg(triple: str) -> None:
+    """Sidecar de remoção de fundo (rembg + u2net via ONNX Runtime).
+
+    **130,9 MB medidos** (Portão 0, 2026-08-13) — contra ~48 MB que a mesma
+    tarefa custaria rodando `u2net.onnx` direto no onnxruntime. O peso e os
+    ~14 s de import vêm do `pymatting`, que `rembg/bg.py` importa no topo e que
+    arrasta `numba` + `llvmlite`. Decisão do usuário com os números na mão; ver
+    o cabeçalho de `bgremove.py`.
+
+    Os PESOS não entram no zip: o rembg baixa o u2net (~168 MB) no primeiro uso,
+    e o `bgremove.py` aponta o `U2NET_HOME` para `~/.cache/camps-utils/models/`.
+    """
+    name = f"converter-rembg-{triple}"
+    print(f"\n=== Bundle REMBG: {name} ===")
+
+    coletar = ["rembg", "onnxruntime", "PIL", "pymatting", "numba"]
+
+    # Mesma subtração dos outros módulos, e aqui ela é mais perigosa que o
+    # normal: `WHISPER_EXCLUDES` corta `requests`/`urllib3`, que são justamente
+    # como o pooch baixa os pesos. Ver `REMBG_NEEDS`.
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + DEPTH_EXCLUDES
+               if m not in coletar and m not in REMBG_NEEDS]
+
+    extra: list[str] = []
+    for lib in coletar:
+        extra += ["--collect-all", lib]
+    for mod in excluir:
+        extra += ["--exclude-module", mod]
+
+    exe = _run_pyinstaller(name, extra)
+
+    zip_path = DIST_DIR / "camps-rembg.zip"
+    print(f"\nZipando {exe.name} -> {zip_path.name} …")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(exe, arcname=exe.name)
+
+    sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (DIST_DIR / "camps-rembg.sha256").write_text(sha, encoding="utf-8")
+
+    print(f"\nZip:    {zip_path}  ({zip_path.stat().st_size // (1024*1024)} MB)")
+    print(f"SHA256: {sha}")
+    print("\n>> Suba 'camps-rembg.zip' num Release com a tag 'rembg-v1' (marcado como "
+          "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> REMBG.sha256")
+
+
 def build_ffmpeg() -> None:
     """Zipa ffmpeg.exe + ffprobe.exe p/ o Release. Não compila nada."""
     print("\n=== Bundle FFMPEG ===")
@@ -273,6 +336,51 @@ def build_ffmpeg() -> None:
           "src-tauri/src/commands.rs -> FFMPEG.sha256")
 
 
+def build_realesrgan() -> None:
+    """Zipa o Real-ESRGAN ncnn/Vulkan p/ o Release. Não compila nada.
+
+    Espera `src-tauri/binaries/realesrgan/` com o exe, a `vcomp140.dll` e a
+    pasta `models/`. A origem é o bundle do upstream:
+    https://github.com/xinntao/Real-ESRGAN/releases → realesrgan-ncnn-vulkan-*-windows.zip
+    (o repo Real-ESRGAN-ncnn-vulkan publica o exe SEM os modelos).
+
+    Só o modelo geral (`realesrgan-x4plus`) entra: os de anime somam ~11 MB e
+    ninguém os escolhe na interface hoje. Ver `MODELOS_UPSCALE` no commands.rs.
+    """
+    print("\n=== Bundle REAL-ESRGAN ===")
+    raiz = BINARIES_DIR / "realesrgan"
+    fontes = [
+        raiz / "realesrgan-ncnn-vulkan.exe",
+        raiz / "vcomp140.dll",
+        raiz / "models" / "realesrgan-x4plus.param",
+        raiz / "models" / "realesrgan-x4plus.bin",
+    ]
+    faltando = [str(f.relative_to(BINARIES_DIR)) for f in fontes if not f.exists()]
+    if faltando:
+        sys.exit(
+            f"Não encontrei {', '.join(faltando)} em {BINARIES_DIR}.\n"
+            "Baixe o realesrgan-ncnn-vulkan-*-windows.zip dos Releases do xinntao/Real-ESRGAN "
+            "e copie exe + dll + models/realesrgan-x4plus.* para binaries/realesrgan/."
+        )
+
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+    zip_path = DIST_DIR / "camps-realesrgan.zip"
+    print(f"Zipando {len(fontes)} arquivos -> {zip_path.name} …")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in fontes:
+            # arcname com a pasta: o Rust procura runtime/realesrgan/... e o
+            # binário acha os modelos pelo caminho relativo ao exe.
+            zf.write(f, arcname=str(f.relative_to(BINARIES_DIR)).replace("\\", "/"))
+
+    sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (DIST_DIR / "camps-realesrgan.sha256").write_text(sha, encoding="utf-8")
+
+    print(f"\nZip:    {zip_path}  ({zip_path.stat().st_size // (1024*1024)} MB)")
+    print(f"SHA256: {sha}")
+    print("\n>> Suba 'camps-realesrgan.zip' num Release com a tag 'realesrgan-v1' (marcado como "
+          "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> REALESRGAN.sha256")
+
+
 def clean() -> None:
     """Limpa o trabalho do PyInstaller preservando os pacotes de Release.
 
@@ -297,13 +405,15 @@ def clean() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build dos sidecars CAMPS-UTILS")
     parser.add_argument("target", nargs="?", default="both",
-                        choices=["light", "docling", "whisper", "depth", "ffmpeg", "both"])
+                        choices=["light", "docling", "whisper", "depth", "rembg", "ffmpeg",
+                                 "realesrgan", "both"])
     args = parser.parse_args()
 
-    # ffmpeg só empacota binários prontos: não roda PyInstaller e, sobretudo,
-    # não pode chamar clean() — isso apagaria os sidecars já compilados.
-    if args.target == "ffmpeg":
-        build_ffmpeg()
+    # ffmpeg e realesrgan só empacotam binários prontos: não rodam PyInstaller
+    # e, sobretudo, não podem chamar clean() — isso apagaria os sidecars já
+    # compilados.
+    if args.target in ("ffmpeg", "realesrgan"):
+        (build_ffmpeg if args.target == "ffmpeg" else build_realesrgan)()
         print("\nBuild concluído.")
         raise SystemExit(0)
 
@@ -319,5 +429,7 @@ if __name__ == "__main__":
         build_whisper(triple)
     if args.target == "depth":
         build_depth(triple)
+    if args.target == "rembg":
+        build_rembg(triple)
 
     print("\nBuild concluído.")

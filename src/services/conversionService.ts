@@ -91,6 +91,83 @@ export async function convertImages(args: ImageConvertArgs): Promise<string[]> {
   });
 }
 
+export type VectorDetail = "baixo" | "medio" | "alto";
+
+export interface VectorizeArgs {
+  input: string;
+  /** Ausente = rascunho em temp (fluxo da prévia). */
+  outPath?: string;
+  detail?: VectorDetail;
+}
+
+export interface VectorizeResult {
+  outputPath: string;
+  /** Nº de `<path>` — prova de vetor de verdade, e noção do peso do arquivo. */
+  paths: number;
+  bytes: number;
+  /** Dimensões do ORIGINAL (o SVG escala sem perder nitidez). */
+  width: number;
+  height: number;
+  /** Lado maior usado no traçado; menor que o original = imagem reduzida antes. */
+  tracedSide: number;
+  durationMs: number;
+}
+
+/** Vetoriza uma imagem raster em SVG (VTracer, nativo, local). */
+export async function vectorizeImage(args: VectorizeArgs): Promise<VectorizeResult> {
+  return invoke<VectorizeResult>("vectorize_image", {
+    args: {
+      input: args.input,
+      out_path: args.outPath ?? null,
+      detail: args.detail ?? null,
+    },
+  });
+}
+
+export interface UpscaleArgs {
+  input: string;
+  /** Ausente = rascunho em temp (fluxo da prévia). */
+  outPath?: string;
+  /** 2 ou 4. */
+  scale?: 2 | 4;
+  /** Id do modelo; ausente = geral. */
+  model?: string;
+}
+
+export interface UpscaleResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  outWidth: number;
+  outHeight: number;
+  durationMs: number;
+}
+
+/** Aumenta a resolução com o Real-ESRGAN (ncnn/Vulkan, local). */
+export async function upscaleImage(args: UpscaleArgs): Promise<UpscaleResult> {
+  return invoke<UpscaleResult>("upscale_image", {
+    args: {
+      input: args.input,
+      out_path: args.outPath ?? null,
+      scale: args.scale ?? null,
+      model: args.model ?? null,
+    },
+  });
+}
+
+export async function realesrganInstalled(): Promise<boolean> {
+  return invoke<boolean>("realesrgan_installed");
+}
+
+export async function ensureRealesrgan(): Promise<void> {
+  await invoke("ensure_realesrgan");
+}
+
+/** Copia um arquivo já gerado (rascunho de prévia) para o destino escolhido. */
+export async function copyFile(from: string, to: string): Promise<string> {
+  return invoke<string>("copy_file", { from, to });
+}
+
 /** Generates a QR code PNG. Returns the output path. */
 export async function generateQr(
   text: string,
@@ -316,6 +393,30 @@ export async function depthInstalled(): Promise<boolean> {
 /** Downloads + extracts the depth module. Progress via `depth-progress`. */
 export async function ensureDepth(): Promise<void> {
   await invoke("ensure_depth");
+}
+
+export async function rembgInstalled(): Promise<boolean> {
+  return invoke<boolean>("rembg_installed");
+}
+
+export async function ensureRembg(): Promise<void> {
+  await invoke("ensure_rembg");
+}
+
+export interface RemoveBgResult {
+  success: boolean;
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  provider?: string;
+  durationMs?: number;
+  message?: string;
+  errorCode?: string;
+}
+
+/** Remove o fundo (u2net via ONNX). Devolve um PNG com alfa em temp. */
+export async function removeBg(inputPath: string): Promise<RemoveBgResult> {
+  return runTool<RemoveBgResult>("remove_bg", { inputPath });
 }
 
 export interface DepthMapResult {

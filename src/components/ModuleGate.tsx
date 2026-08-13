@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, FileScan, Layers } from "lucide-react";
+import { AudioLines, Clapperboard, Eraser, FileScan, Layers, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -7,8 +7,12 @@ import {
   ensureDepth,
   ensureDocling,
   ensureFfmpeg,
+  ensureRealesrgan,
+  ensureRembg,
   ensureWhisper,
   ffmpegInstalled,
+  realesrganInstalled,
+  rembgInstalled,
   whisperInstalled,
 } from "../services/conversionService";
 import { Button } from "./ui";
@@ -55,6 +59,30 @@ export const MODULES = {
     evento: "whisper-progress",
     checar: whisperInstalled,
     baixar: ensureWhisper,
+  },
+  realesrgan: {
+    titulo: "Módulo de aumento de qualidade (Real-ESRGAN)",
+    descricao:
+      "O aumento de resolução usa o Real-ESRGAN, baixado uma única vez (~31 MB). Os pesos do modelo vêm dentro do módulo — depois disso funciona sem internet. Precisa de placa de vídeo com Vulkan.",
+    rotuloBotao: "Baixar módulo (~31 MB)",
+    tamanho: "~31 MB",
+    usadoPor: "Aumentar qualidade",
+    icone: Sparkles,
+    evento: "realesrgan-progress",
+    checar: realesrganInstalled,
+    baixar: ensureRealesrgan,
+  },
+  rembg: {
+    titulo: "Módulo de remoção de fundo (u2net)",
+    descricao:
+      "A remoção de fundo usa o rembg com o modelo u2net, baixado uma única vez (~136 MB). Os pesos do modelo (~168 MB) vêm depois, na primeira remoção.",
+    rotuloBotao: "Baixar módulo (~136 MB)",
+    tamanho: "~136 MB",
+    usadoPor: "Remover fundo",
+    icone: Eraser,
+    evento: "rembg-progress",
+    checar: rembgInstalled,
+    baixar: ensureRembg,
   },
   depth: {
     titulo: "Módulo de profundidade (Depth Anything V2)",

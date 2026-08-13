@@ -1,252 +1,361 @@
-# PDF to Markdown
+# CAMPS-UTILS
 
-Aplicativo desktop para Windows que converte PDFs em Markdown localmente, sem enviar arquivos para a internet.
+Suíte desktop para Windows com ferramentas locais para documentos, imagens, áudio, vídeo e utilitários do dia a dia.
 
-**Stack:** Tauri 2 · React 18 · TypeScript · Vite · Tailwind CSS · Python 3 · Docling · PyInstaller
+O projeto começou como **PDF to Markdown** e evoluiu para uma aplicação multiferramenta. A maior parte do processamento acontece no computador do usuário, sem enviar arquivos para serviços de conversão externos.
 
----
+**Versão atual:** 1.0.1
 
-## Pré-requisitos
+**Plataforma:** Windows 10/11
 
-| Ferramenta | Versão mínima | Instalação |
-|---|---|---|
-| Node.js | 18+ | https://nodejs.org |
-| Rust + Cargo | 1.77+ | https://rustup.rs |
-| Python | 3.11+ | https://python.org |
-| Visual Studio Build Tools | 2022 | Exigido pelo Rust no Windows |
+**Stack:** Tauri 2 · React 18 · TypeScript · Vite · Tailwind CSS · Rust · Python · PyInstaller
 
-### Instalar Rust no Windows
+## Funcionalidades
+
+### Documentos
+
+- PDF → Markdown com Docling e OCR
+- Markdown → PDF
+- Word (`.docx`) → PDF sem exigir Microsoft Word
+- Visualizar, juntar, dividir, extrair páginas e comprimir PDFs
+
+### Imagens
+
+- Converter imagens entre WebP, PNG, JPG e ICO
+- Redimensionar e renomear imagens em lote
+- Comprimir imagens por qualidade ou tamanho-alvo
+- Gerar mapas de profundidade com Depth Anything V2
+
+### Mídia
+
+- Gerar legendas SRT/VTT localmente com Whisper
+- Gravar legendas em vídeos ou criar faixa desligável
+- Baixar áudio, vídeo ou playlists do YouTube
+- Comprimir vídeos em H.264
+- Converter áudio para MP3, WAV ou FLAC
+- Converter trechos de vídeo em GIF
+
+### Utilitários
+
+- Codificar e decodificar Base64
+- Gerar QR codes
+- Calcular hashes MD5, SHA-1 e SHA-256
+
+## Privacidade e uso da internet
+
+Os arquivos processados não são enviados para APIs de conversão. O aplicativo trabalha localmente por meio do backend Rust, do sidecar Python e de ferramentas como ffmpeg.
+
+A internet é usada apenas quando necessário para:
+
+- baixar vídeos ou áudios solicitados pelo usuário;
+- procurar e instalar atualizações do aplicativo;
+- baixar módulos opcionais na primeira utilização;
+- baixar pesos de modelos de IA local.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    A[React + TypeScript] -->|Tauri invoke| B[Rust]
+    B --> C[Operações nativas]
+    B --> D[Sidecar Python]
+    B --> E[ffmpeg e módulos opcionais]
+    C --> F[Arquivo de saída]
+    D --> F
+    E --> F
+```
+
+- **React/TypeScript:** interface, formulários, prévias, histórico e configurações.
+- **Tauri/Rust:** janela desktop, diálogos, filesystem, processos, downloads e operações nativas.
+- **Python:** Docling, OCR, documentos, PDFs, transcrição e depth map.
+- **ffmpeg:** vídeo, áudio, GIF, download e processamento de legendas.
+- **localStorage:** configurações e histórico local.
+
+As ferramentas são registradas em `src/tools/registry.tsx`, fonte única para a Home e a Sidebar.
+
+## Pré-requisitos para desenvolvimento
+
+| Ferramenta | Requisito |
+|---|---|
+| Node.js | 18 ou superior |
+| Rust/Cargo | 1.77 ou superior, toolchain MSVC |
+| Python | 3.11 ou superior |
+| Visual Studio Build Tools | 2022, com desenvolvimento para desktop em C++ |
+| WebView2 | normalmente já incluído no Windows 10/11 |
+
+Instalação do Rust e das Build Tools pelo `winget`:
 
 ```powershell
 winget install Rustlang.Rustup
-# Feche e reabra o terminal após a instalação
-rustc --version
-```
-
-### Instalar dependências do Tauri (WebView2)
-
-O Tauri usa o WebView2 no Windows. Ele geralmente já está disponível no Windows 10/11.
-Se não estiver: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
-
-### Visual Studio Build Tools
-
-O Rust no Windows requer o MSVC toolchain:
-```powershell
 winget install Microsoft.VisualStudio.2022.BuildTools
 ```
-Durante a instalação, selecione "Desenvolvimento para desktop com C++".
 
----
+Depois de instalar o Rust, feche e abra novamente o terminal.
 
-## Setup
+## Configuração do ambiente
 
-### 1. Instalar dependências Node
+### Setup automático
+
+```powershell
+# Prepara o ambiente e gera o instalador
+npm run setup
+
+# Prepara o ambiente e inicia em modo de desenvolvimento
+npm run setup:dev
+```
+
+O processo é controlado por `scripts/setup.ps1`.
+
+### Setup manual
 
 ```powershell
 npm install
-```
 
-### 2. Criar ambiente virtual Python
-
-```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-```
 
-### 3. Instalar dependências Python
-
-```powershell
 pip install -r python\requirements.txt
 ```
 
-> **Nota:** O Docling é uma dependência pesada (~500 MB com dependências). A instalação pode demorar alguns minutos.
-
----
+As dependências Python e os modelos de IA são pesados. Reserve alguns gigabytes e espere uma instalação inicial mais demorada.
 
 ## Desenvolvimento
 
 ```powershell
-# Com o ambiente virtual ativado:
+# Aplicativo completo: Vite + Tauri/Rust
 npm run dev
+
+# Apenas a interface web
+npm run dev:vite
 ```
 
-Isso abre o aplicativo Tauri com hot-reload do React.
+O servidor Vite usa obrigatoriamente a porta **1420**, configurada no Tauri.
 
-> **Importante:** O sidecar Python precisa ser compilado antes de testar a conversão real.
-> Em modo dev, você pode testar a interface sem o sidecar, mas a conversão falhará com erro de sidecar.
+`npm run dev:vite` é útil para trabalhar apenas na interface. Diálogos, filesystem, processos e chamadas `invoke()` dependentes do Tauri não funcionarão nesse modo.
 
----
-
-## Compilar o sidecar Python
+## Testes e verificações
 
 ```powershell
-# Com o ambiente virtual ativado:
-npm run build:python
-# ou diretamente:
-python python/build.py
-```
+# TypeScript
+npm run typecheck
 
-O script:
-1. Limpa builds anteriores
-2. Executa o PyInstaller em modo `--onedir`
-3. Copia o executável para `src-tauri/binaries/converter-x86_64-pc-windows-msvc/`
-
-> **Por que `--onedir` e não `--onefile`?**
-> O Docling usa muitas DLLs e modelos que não funcionam bem no modo `--onefile`
-> (extração lenta, conflitos de caminho). O modo `--onedir` é mais confiável.
-
----
-
-## Gerar ícones
-
-```powershell
-# Crie ou obtenha um PNG de 1024x1024 pixels e execute:
-npx tauri icon caminho\para\icone.png
-```
-
-Isso gera automaticamente todos os tamanhos necessários em `src-tauri/icons/`.
-
----
-
-## Build do instalador
-
-```powershell
-# Compila o sidecar Python + gera o instalador Tauri
-npm run build:all
-```
-
-O instalador ficará em `src-tauri/target/release/bundle/`:
-- `.msi` — Windows Installer
-- `nsis/` — instalador NSIS (`.exe`)
-
-O instalador **não requer** que o usuário tenha Python, Node.js ou Rust instalados.
-
----
-
-## Testes
-
-### Testes Python
-
-```powershell
-.venv\Scripts\Activate.ps1
-cd python
-pytest test_converter.py -v
-```
-
-### Testes da interface
-
-```powershell
+# Frontend
 npm test
+npm run test:watch
+
+# Um teste específico
+npx vitest run src/test/App.test.tsx
+
+# Python
+.venv\Scripts\python -m pytest python -v
+
+# Rust
+cargo check --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml
+
+# Build isolado do frontend
+npm run build:vite
 ```
 
----
-
-## Modelos do Docling
-
-Na **primeira conversão**, o Docling baixa automaticamente os modelos de ML necessários.
-
-- **Localização:** `C:\Users\<usuario>\.cache\huggingface\hub\`
-- **Tamanho:** ~1–2 GB dependendo dos modelos
-- **Tempo:** pode levar 5–15 minutos na primeira execução
-- **Reutilização:** os modelos são cacheados e não são baixados novamente
-
-O aplicativo exibe um aviso quando detecta que é o primeiro uso.
-
----
-
-## Estrutura de pastas
-
-```
-pdf-to-markdown/
-├── src/                        # Interface React/TypeScript
-│   ├── components/             # Componentes UI
-│   ├── hooks/                  # React hooks
-│   ├── services/               # Serviços (Tauri invoke, settings, log)
-│   ├── types/                  # Tipos TypeScript compartilhados
-│   ├── test/                   # Testes da interface
-│   ├── App.tsx                 # Componente raiz + reducer de estado
-│   ├── main.tsx                # Entry point React
-│   └── index.css               # Estilos globais + Tailwind
-├── src-tauri/                  # Backend Tauri/Rust
-│   ├── src/
-│   │   ├── main.rs             # Entry point Rust
-│   │   ├── lib.rs              # Setup do Tauri + plugins
-│   │   └── commands.rs         # Comandos: convert_pdf, save_markdown, open_folder
-│   ├── binaries/               # Sidecar compilado (gerado pelo build:python)
-│   ├── capabilities/           # Permissões Tauri
-│   ├── icons/                  # Ícones do aplicativo
-│   ├── Cargo.toml
-│   └── tauri.conf.json
-├── python/                     # Sidecar Python
-│   ├── converter.py            # Conversor PDF → Markdown
-│   ├── build.py                # Script de empacotamento PyInstaller
-│   ├── requirements.txt        # Dependências Python
-│   └── test_converter.py       # Testes unitários
-├── skills/                     # Referências de UI/UX (uso manual)
-├── .venv/                      # Ambiente virtual Python (não versionado)
-├── package.json
-├── vite.config.ts
-├── tailwind.config.ts
-└── roadmap.md                  # Checklist de implementação
-```
-
----
-
-## Limpar cache e builds
+## Build
 
 ```powershell
-# Limpar build Tauri/Rust
-Remove-Item -Recurse -Force src-tauri\target
+# Compila o sidecar e os módulos Python
+npm run build:python
 
-# Limpar build Python
-Remove-Item -Recurse -Force python\dist, python\build
+# Gera o aplicativo Tauri e coleta os instaladores
+npm run build
 
-# Limpar sidecar compilado
-Remove-Item -Recurse -Force src-tauri\binaries
+# Executa os dois passos anteriores
+npm run build:all
 
-# Limpar node_modules
-Remove-Item -Recurse -Force node_modules
-npm install
-
-# Limpar modelos Docling (libera ~1-2 GB)
-# ATENÇÃO: precisará baixar novamente na próxima conversão
-Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\huggingface\hub"
+# Recopia bundles existentes para installers/
+npm run installers
 ```
 
----
+Os artefatos finais são copiados para `installers/`. O usuário do aplicativo instalado não precisa ter Node.js, Rust ou Python.
 
-## Limitações conhecidas
+### Módulos Python específicos
 
-- **Cancelamento de conversão:** não implementado no MVP. O processo Python roda até o fim.
-  A arquitetura está preparada (o PID do sidecar é acessível via `tauri-plugin-shell`) para
-  implementação futura.
+```powershell
+python python/build.py docling
+python python/build.py ffmpeg
+python python/build.py whisper
+python python/build.py depth
+```
 
-- **Primeiro uso:** o Docling precisa baixar modelos ML (~1-2 GB). O aplicativo exibe aviso,
-  mas não há barra de progresso do download.
+O PyInstaller segue imports indiretos, inclusive imports dentro de funções. Depois de gerar um módulo, confira o tamanho do ZIP e execute o binário empacotado fora da `.venv` para detectar dependências ausentes ou incorporadas por engano.
 
-- **Múltiplos PDFs:** apenas um arquivo por vez no MVP.
+## Módulos baixados sob demanda
 
-- **OCR:** o Docling pode realizar OCR básico, mas a configuração avançada não está exposta na
-  interface do MVP.
+Recursos grandes ficam fora do instalador principal. No primeiro uso, o aplicativo baixa o módulo, verifica seu SHA256 e o extrai no diretório local da aplicação.
 
----
+| Módulo | Recurso | Release |
+|---|---|---|
+| Docling | PDF → Markdown e OCR | `docling-v1` |
+| ffmpeg/ffprobe | ferramentas de mídia | `ffmpeg-v1` |
+| Whisper | transcrição e legendas | `whisper-v1` |
+| Depth Anything V2 | mapas de profundidade | `depth-v1` |
+
+As URLs, hashes e arquivos marcadores são definidos como `RemoteModule` em `src-tauri/src/commands.rs`.
+
+Docling e Whisper também podem baixar pesos para `~/.cache/huggingface/hub`. O Depth usa `~/.cache/camps-utils/models/`.
+
+## Como adicionar uma ferramenta
+
+### Frontend
+
+1. Crie `src/tools/<id>/<NomeTool>.tsx`.
+2. Reutilize os componentes de `src/components/ui/` e os hooks existentes.
+3. Registre a ferramenta em `src/tools/registry.tsx`.
+4. Adicione o wrapper de backend em `src/services/conversionService.ts`, se necessário.
+5. Adicione testes em `src/test/`.
+
+Não é necessário cadastrar a ferramenta separadamente na Home e na Sidebar: ambas usam o registro central.
+
+### Comando Rust
+
+1. Implemente o comando em `src-tauri/src/commands.rs`.
+2. Registre-o no `generate_handler!` de `src-tauri/src/lib.rs`.
+3. Crie um wrapper `invoke()` tipado no frontend.
+4. Revise as permissões em `src-tauri/capabilities/`.
+
+### Operação Python
+
+1. Implemente a função em `python/converter.py` ou em um módulo especializado.
+2. Registre a operação em `dispatch(tool, data)`.
+3. Preserve o contrato JSON de sucesso e erro.
+4. Atualize `python/build.py` e os testes.
+
+> **Contrato crítico:** o sidecar Python deve imprimir somente o JSON final em `stdout`. Todos os logs devem usar `log()`, que escreve em `stderr`. Um `print()` extra pode quebrar o `JSON.parse` no frontend.
+
+## Estrutura do repositório
+
+```text
+├── src/
+│   ├── components/              # componentes compartilhados e UI
+│   ├── hooks/                   # hooks de conversão, histórico e progresso
+│   ├── services/                # integração com comandos Tauri
+│   ├── tools/                   # componentes de cada ferramenta
+│   ├── types/                   # contratos e estado TypeScript
+│   └── test/                    # testes do frontend
+├── src-tauri/
+│   ├── src/commands.rs          # backend nativo e módulos remotos
+│   ├── src/lib.rs               # plugins e registro de comandos
+│   ├── capabilities/            # permissões Tauri
+│   └── tauri.conf.json          # janela, CSP, bundle e updater
+├── python/
+│   ├── converter.py             # dispatcher e conversões
+│   ├── subtitles.py             # processamento de legendas
+│   ├── depth.py                 # geração de depth map
+│   └── build.py                 # empacotamento PyInstaller
+├── scripts/                     # setup, versão, instaladores e release
+├── roadmaps/                    # estado e próximas entregas
+├── spec/                        # especificações do produto
+├── installers/                  # artefatos de distribuição
+├── RESUME.md                    # documentação detalhada para Obsidian
+└── VERSION                      # versão canônica
+```
+
+## Versionamento e release
+
+`VERSION` é a versão canônica. Estes arquivos devem permanecer sincronizados:
+
+- `VERSION`
+- `package.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/tauri.conf.json`
+
+```powershell
+npm run version:check
+npm run version:sync
+```
+
+Para um build assinado, defina no terminal:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$env:USERPROFILE\.tauri\camps-utils.key" -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<senha>"
+```
+
+Depois:
+
+```powershell
+npm run build
+npm run release
+```
+
+`npm run release` gera `installers/latest.json`, usado pelo updater automático.
+
+Anexe ao GitHub Release da versão:
+
+- o instalador `*-setup.exe`;
+- a assinatura `.sig` correspondente;
+- `latest.json`.
+
+Nunca adicione a chave privada ou sua senha ao repositório. Perder a chave impede novas atualizações para quem já instalou o aplicativo.
+
+### Regra dos GitHub Releases
+
+- Versões do aplicativo, como `v1.0.1`, devem ser releases normais.
+- Depósitos de módulos, como `ffmpeg-v1`, devem ser marcados como **pre-release**.
+
+O endpoint do updater usa `releases/latest/download/latest.json`. Um depósito publicado como release normal pode virar o `latest` e interromper as atualizações.
+
+## Pontos importantes
+
+- O estado do frontend usa `useReducer`; não há Redux.
+- Configurações e histórico ficam em `localStorage`.
+- O progresso do Docling é simulado; algumas ferramentas de mídia têm progresso real.
+- O evento `tool-progress` pertence à janela e deve ser consumido pelo hook compartilhado.
+- A prévia HTML de legendas aproxima o resultado do libass, mas não é pixel a pixel.
+- A CSP de produção não é reproduzida integralmente em `tauri dev`; execute o teste `src/test/csp.test.ts` e valide builds empacotados.
+- `installers/` preserva versões antigas; confira o arquivo antes de publicar.
+- Partes do código ainda usam nomes legados de `pdf-to-markdown` por compatibilidade.
+
+## Roadmaps
+
+- `roadmaps/new-functions/roadmap.md`: evolução da suíte, módulos e updater.
+- `roadmaps/removebg-vtracer-realesrgan/roadmap.md`: prioridade atual — VTracer, Real-ESRGAN e remoção de fundo.
+- `roadmaps/ia-local/roadmap.md`: fase de IA local em espera.
+- `spec/novas-funcoes/camps-utils-spec.md`: especificação formal da suíte.
+
+Antes de iniciar uma implementação, leia `CLAUDE.md`, este README e o roadmap da fase correspondente. Registre no roadmap o que foi concluído e os próximos passos.
 
 ## Solução de problemas
 
-### "Sidecar não encontrado"
-Execute `npm run build:python` com o ambiente virtual ativado antes de usar a conversão.
+### Porta 1420 ocupada
 
-### "Conversor encerrou com código 1"
-Verifique se o arquivo PDF não está corrompido ou protegido por senha.
+O Vite usa `strictPort`. Encerre o processo que está usando a porta 1420 e execute novamente `npm run dev`.
 
-### Primeira conversão lenta
-Normal — o Docling está baixando os modelos. Conexão à internet necessária apenas nesta etapa.
+### `link.exe` não encontrado
 
-### Erro de compilação Rust: "link.exe not found"
-Instale o Visual Studio Build Tools com suporte a C++ (ver seção de Pré-requisitos).
+Instale o Visual Studio Build Tools 2022 com o workload de desenvolvimento para desktop em C++.
 
-### PyInstaller falha com erro de módulo
-Certifique-se de que o ambiente virtual está ativado antes de executar `npm run build:python`.
+### Sidecar ou módulo não encontrado
 
-### "WebView2 não encontrado"
-Baixe e instale o WebView2 Runtime: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+Ative a `.venv` e recompile o alvo:
+
+```powershell
+.venv\Scripts\Activate.ps1
+npm run build:python
+```
+
+### Conversão funciona na `.venv`, mas falha no instalador
+
+Provavelmente há uma dependência ausente no bundle PyInstaller. Execute diretamente o `.exe` gerado e revise inclusões, `hiddenimports` e exclusões em `python/build.py`.
+
+### Primeira execução lenta
+
+É esperado durante o download e a inicialização dos módulos ou pesos de modelos. As execuções seguintes reutilizam o cache.
+
+### WebView2 ausente
+
+Instale o [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+## Documentação adicional
+
+- [`RESUME.md`](RESUME.md): visão técnica detalhada em formato Obsidian.
+- [`CLAUDE.md`](CLAUDE.md): contexto de manutenção, contratos e armadilhas.
+- [`roadmaps/`](roadmaps/): planejamento vivo do produto.
+- [`spec/`](spec/): especificações formais.

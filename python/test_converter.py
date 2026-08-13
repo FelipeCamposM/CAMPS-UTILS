@@ -1,6 +1,7 @@
 """Tests for converter.py — tests our integration logic, not Docling internals."""
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -725,6 +726,110 @@ class TestDepthMapEntrada:
 
         r = depth_map(str(_png(tmp_path / "x.png")), "gigante")
         assert r["errorCode"] == "INVALID_INPUT"
+
+
+class TestRemoveBgEntrada:
+    """Validação antes de importar o rembg — e aqui o caminho barato importa
+    mais que nos outros módulos: só o `import rembg` leva ~14 s (medido)."""
+
+    def test_sem_caminho(self):
+        from converter import remove_bg
+
+        assert remove_bg(None)["errorCode"] == "INVALID_INPUT"
+
+    def test_arquivo_inexistente(self, tmp_path):
+        from converter import remove_bg
+
+        assert remove_bg(str(tmp_path / "x.png"))["errorCode"] == "FILE_NOT_FOUND"
+
+    def test_extensao_nao_suportada(self, tmp_path):
+        from converter import remove_bg
+
+        alvo = tmp_path / "x.bmp"
+        alvo.write_bytes(b"BM")
+        assert remove_bg(str(alvo))["errorCode"] == "INVALID_EXTENSION"
+
+    def test_dispatch_encaminha_remove_bg(self, tmp_path):
+        r = dispatch("remove_bg", {"inputPath": str(tmp_path / "nada.png")})
+        assert r["errorCode"] == "FILE_NOT_FOUND"
+
+
+class TestRemoveBgSaida:
+    """Contrato do resultado, com a segmentação trocada por um dublê.
+
+    O modelo de verdade custa ~170 MB de download e segundos por imagem; o que
+    esta suíte precisa provar é o que fica em volta dele — que o PNG sai com
+    alfa, no caminho combinado, e que o erro do módulo vira mensagem em pt-BR.
+    """
+
+    def test_grava_png_com_alfa_e_devolve_medidas(self, tmp_path, monkeypatch):
+        from PIL import Image
+
+        import bgremove
+        from converter import remove_bg
+
+        recorte = Image.new("RGBA", (7, 5), (10, 20, 30, 0))
+        recorte.putpixel((3, 2), (200, 60, 50, 255))
+        monkeypatch.setattr(
+            bgremove, "remover_fundo",
+            lambda caminho, *a, **k: (recorte, "CPUExecutionProvider"),
+        )
+
+        r = remove_bg(str(_png(tmp_path / "entrada.png")))
+        assert r["success"] is True, r
+        assert (r["width"], r["height"]) == (7, 5)
+        assert r["provider"] == "CPUExecutionProvider"
+
+        salvo = Image.open(r["outputPath"])
+        assert salvo.mode == "RGBA", "sem canal alfa o recorte não serve para nada"
+        assert salvo.getpixel((0, 0))[3] == 0 and salvo.getpixel((3, 2))[3] == 255
+
+    def test_falha_de_download_vira_mensagem_de_modelo(self, tmp_path, monkeypatch):
+        """Sem separar isto, queda de rede no primeiro uso apareceria como
+        'arquivo corrompido' — e o usuário iria procurar defeito na imagem."""
+        import bgremove
+        from converter import remove_bg
+
+        def explode(*a, **k):
+            raise OSError("connection reset")
+
+        monkeypatch.setattr(bgremove, "remover_fundo", explode)
+        monkeypatch.setattr(bgremove, "modelo_em_cache", lambda *a, **k: False)
+
+        r = remove_bg(str(_png(tmp_path / "entrada.png")))
+        assert r["errorCode"] == "MODEL_ERROR"
+        assert "conexão" in r["message"]
+
+    def test_com_modelo_em_cache_a_mesma_falha_e_de_leitura(self, tmp_path, monkeypatch):
+        import bgremove
+        from converter import remove_bg
+
+        def explode(*a, **k):
+            raise OSError("truncated file")
+
+        monkeypatch.setattr(bgremove, "remover_fundo", explode)
+        monkeypatch.setattr(bgremove, "modelo_em_cache", lambda *a, **k: True)
+
+        r = remove_bg(str(_png(tmp_path / "entrada.png")))
+        assert r["errorCode"] == "INVALID_INPUT"
+
+
+class TestBgRemoveCache:
+    def test_pesos_vao_para_o_cache_do_app(self, monkeypatch):
+        """O rembg usaria `~/.u2net`. Espalhar peso de modelo por pastas
+        escondidas é justamente o que o roadmap proíbe."""
+        import bgremove
+
+        monkeypatch.delenv("U2NET_HOME", raising=False)
+        bgremove._preparar_ambiente()
+        assert os.environ["U2NET_HOME"] == str(bgremove.dir_modelos())
+        assert bgremove.dir_modelos().name == "models"
+        assert "camps-utils" in str(bgremove.dir_modelos())
+
+    def test_caminho_do_modelo_padrao(self):
+        import bgremove
+
+        assert bgremove.caminho_modelo().name == "u2net.onnx"
 
 
 class TestDepthDispatch:

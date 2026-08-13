@@ -32,6 +32,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 futures-util = "0.3"
 zip = "2"
 tauri-plugin-process = "2"
+vtracer = "0.6"
 
 # Lista as fontes instaladas lendo o registro. Enumerar C:\Windows\Fonts pelo
 # nome de arquivo daria nomes errados (seguibl.ttf não é "Segoe UI Black") e o

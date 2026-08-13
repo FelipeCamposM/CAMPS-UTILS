@@ -1,6 +1,6 @@
 import type { ReactNode, ComponentType } from "react";
 import type { ModuleId } from "../components/ModuleGate";
-import { Braces, Captions, CirclePlay, FileOutput, FileText, FileType, Film, Hash, Image, Layers, Music, QrCode, Scaling, Scissors, Shrink, Subtitles, Video } from "lucide-react";
+import { Braces, Captions, CirclePlay, Eraser, FileOutput, FileText, FileType, Film, Hash, Image, Layers, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
 import type { AppSettings } from "../types/settings";
 import type { HistoryEntry } from "../types/conversion";
 import { PdfToMarkdownTool } from "./pdf-to-markdown/PdfToMarkdownTool";
@@ -10,6 +10,9 @@ import { PdfToolsTool } from "./pdf-tools/PdfToolsTool";
 import { ImageConvertTool } from "./image-convert/ImageConvertTool";
 import { ImageResizeTool } from "./image-resize/ImageResizeTool";
 import { ImageCompressTool } from "./image-compress/ImageCompressTool";
+import { ImageVectorizeTool } from "./image-vectorize/ImageVectorizeTool";
+import { ImageUpscaleTool } from "./image-upscale/ImageUpscaleTool";
+import { BgRemoveTool } from "./bg-remove/BgRemoveTool";
 import { DepthMapTool } from "./depth-map/DepthMapTool";
 import { Base64Tool } from "./base64/Base64Tool";
 import { QrCodeTool } from "./qr-code/QrCodeTool";
@@ -118,6 +121,32 @@ export const TOOLS: ToolDef[] = [
     category: "imagens",
     icon: <Shrink className="w-full h-full" />,
     component: ImageCompressTool,
+  },
+  {
+    id: "image-vectorize",
+    name: "Vetorizar imagem",
+    description: "Converte PNG, JPG ou WebP em SVG vetorial de verdade (VTracer).",
+    category: "imagens",
+    icon: <Spline className="w-full h-full" />,
+    component: ImageVectorizeTool,
+  },
+  {
+    id: "image-upscale",
+    name: "Aumentar qualidade",
+    description: "Aumenta a resolução em 2x ou 4x com IA (Real-ESRGAN), na sua placa de vídeo.",
+    category: "imagens",
+    icon: <Sparkles className="w-full h-full" />,
+    component: ImageUpscaleTool,
+    module: "realesrgan",
+  },
+  {
+    id: "bg-remove",
+    name: "Remover fundo",
+    description: "Detecta o objeto principal e devolve um PNG com fundo transparente.",
+    category: "imagens",
+    icon: <Eraser className="w-full h-full" />,
+    component: BgRemoveTool,
+    module: "rembg",
   },
   {
     id: "depth-map",

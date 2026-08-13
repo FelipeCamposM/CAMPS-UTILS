@@ -47,6 +47,7 @@ async fn run_python_tool(app: &AppHandle, tool: &str, input_json: &str) -> Resul
             // fica no light de propósito: ajustar um slider não pode depender de
             // 45 MB baixados nem recarregar modelo nenhum.
             "depth_map" => run_module_sidecar(app, depth_exe_path(app), "DEPTH_MISSING", tool, input_json).await,
+            "remove_bg" => run_module_sidecar(app, rembg_exe_path(app), "REMBG_MISSING", tool, input_json).await,
             _ => run_sidecar_python(app, tool, input_json).await,
         }
     }
@@ -285,8 +286,87 @@ const DEPTH: RemoteModule = RemoteModule {
     label: "Profundidade (Depth Anything V2)",
 };
 
+/// Aumento de resolução (Real-ESRGAN). É o binário **ncnn/Vulkan** do upstream,
+/// não a versão PyTorch: roda em GPU de qualquer fabricante via Vulkan e pesa
+/// ~40 MB contra os ~490 MB que o torch custaria. Ver a decisão registrada em
+/// `roadmaps/removebg-vtracer-realesrgan/roadmap.md`.
+///
+/// Conteúdo: `realesrgan-ncnn-vulkan.exe` + `vcomp140.dll` (runtime OpenMP que
+/// o exe exige) + `models/realesrgan-x4plus.{param,bin}`. Os outros modelos do
+/// pacote upstream (anime, animevideov3) ficaram de fora — ver `MODELOS_UPSCALE`.
+const REALESRGAN: RemoteModule = RemoteModule {
+    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/realesrgan-v1/camps-realesrgan.zip",
+    // SHA do `python/dist/camps-realesrgan.zip` (31 MB) gerado por
+    // `python build.py realesrgan` em 2026-08-13. Reproduzível: reempacotar deu
+    // o mesmo hash (só reagrupa binários prontos, como o do ffmpeg).
+    sha256: "b83144d11525a7719b0d3ecd7d85daf46c66f90fa8402a3f754c9093dd934444",
+    zip_name: "camps-realesrgan.zip",
+    event: "realesrgan-progress",
+    marker: "realesrgan/realesrgan-ncnn-vulkan.exe",
+    label: "Aumentar qualidade (Real-ESRGAN)",
+};
+
+/// Remoção de fundo (u2net via ONNX Runtime). Mesma pilha do módulo de
+/// profundidade — onnxruntime + numpy + Pillow — em bundle próprio para que
+/// quem só quer tirar fundo não veja "Profundidade" na tela de download.
+///
+/// Os PESOS não estão no zip: `bgremove.py` os busca no primeiro uso e guarda
+/// em `~/.cache/camps-utils/models/`, como o Depth faz com os dele.
+const REMBG: RemoteModule = RemoteModule {
+    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/rembg-v1/camps-rembg.zip",
+    // SHA do `python/dist/camps-rembg.zip` (136 MB) gerado por
+    // `python build.py rembg` em 2026-08-13 e testado: o .exe empacotado
+    // recortou um PNG de 512×512 em 19 s (a frio, 81 s).
+    // ⚠️ Como os outros bundles de PyInstaller, este NÃO é reproduzível — a
+    // ferramenta carimba data e build id. Publique ESTE arquivo, ou refaça o
+    // build e atualize esta constante junto.
+    sha256: "ecd06bda112050fa353a9cbd7d054007e84a8660474c43758da204b93f51fe3e",
+    zip_name: "camps-rembg.zip",
+    event: "rembg-progress",
+    marker: "converter-rembg-x86_64-pc-windows-msvc.exe",
+    label: "Remover fundo (u2net)",
+};
+
 fn docling_exe_name() -> String {
     format!("converter-docling-{TARGET_TRIPLE}.exe")
+}
+
+fn rembg_exe_name() -> String {
+    format!("converter-rembg-{TARGET_TRIPLE}.exe")
+}
+
+#[cfg(not(debug_assertions))]
+fn rembg_exe_path(app: &AppHandle) -> Option<PathBuf> {
+    runtime_dir(app).map(|d| d.join(rembg_exe_name()))
+}
+
+/// Informa se o módulo de remoção de fundo está pronto. Em dev, sempre true —
+/// o Rust roda `converter.py` pela .venv, que precisa ter onnxruntime.
+#[tauri::command]
+pub async fn rembg_installed(app: AppHandle) -> bool {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        true
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        module_installed(&app, &REMBG)
+    }
+}
+
+/// Baixa e extrai o módulo de remoção de fundo. Emite `rembg-progress` (0–100).
+#[tauri::command]
+pub async fn ensure_rembg(app: AppHandle) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        return Ok(());
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        ensure_module(&app, &REMBG).await
+    }
 }
 
 fn depth_exe_name() -> String {
@@ -414,6 +494,27 @@ pub async fn ensure_ffmpeg(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     ensure_module(&app, &FFMPEG).await
+}
+
+/// Caminho do binário do Real-ESRGAN. Sem `cfg`, pelo mesmo motivo do ffmpeg:
+/// em dev está em `src-tauri/binaries/realesrgan/`, em produção na `runtime/`
+/// depois do download — os dois casos que `resolve_bundled` já cobre.
+fn resolve_realesrgan(app: &AppHandle) -> Option<PathBuf> {
+    resolve_bundled(app, "realesrgan/realesrgan-ncnn-vulkan.exe")
+}
+
+#[tauri::command]
+pub async fn realesrgan_installed(app: AppHandle) -> bool {
+    resolve_realesrgan(&app).is_some()
+}
+
+/// Baixa e extrai o Real-ESRGAN. Emite `realesrgan-progress` (0–100).
+#[tauri::command]
+pub async fn ensure_realesrgan(app: AppHandle) -> Result<(), String> {
+    if resolve_realesrgan(&app).is_some() {
+        return Ok(());
+    }
+    ensure_module(&app, &REALESRGAN).await
 }
 
 fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
@@ -1464,6 +1565,381 @@ fn copy_or_skip(src: &Path, out_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+pub struct VectorizeArgs {
+    input: String,
+    /// Destino. Ausente = rascunho em temp (é o fluxo da prévia).
+    out_path: Option<String>,
+    /// "baixo" | "medio" | "alto" — apelidos dos parâmetros do VTracer.
+    detail: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorizeResult {
+    output_path: String,
+    /// Nº de `<path>` no SVG. É a prova de que saiu vetor de verdade (e não uma
+    /// imagem embrulhada), e dá ao usuário a noção de peso do arquivo.
+    paths: usize,
+    bytes: usize,
+    width: u32,
+    height: u32,
+    /// Lado maior usado no traçado. Menor que o original = a imagem foi reduzida
+    /// antes de traçar (ver `MAX_LADO_VETOR`).
+    traced_side: u32,
+    duration_ms: u64,
+}
+
+/// Teto do lado maior antes de traçar.
+///
+/// O custo do VTracer é por pixel e o SVG resultante cresce junto: uma foto de
+/// 4000 px vira minutos de trabalho e dezenas de MB de `<path>`. Como a saída é
+/// vetorial — escala sem perder nitidez — reduzir a entrada custa detalhe fino,
+/// não resolução final.
+// ponytail: teto fixo; virar opção da UI só se alguém reclamar de perder detalhe.
+const MAX_LADO_VETOR: u32 = 2000;
+
+/// Parâmetros do VTracer por nível de detalhe. O usuário escolhe Baixo/Médio/Alto;
+/// os nomes do algoritmo (speckle, layer difference) não vão para a tela.
+fn config_vetor(detail: &str) -> vtracer::Config {
+    let base = vtracer::Config::default(); // Médio = o padrão do VTracer.
+    match detail {
+        // Menos cores e mais filtro de ruído: SVG pequeno, bom para logo e desenho.
+        "baixo" => vtracer::Config {
+            filter_speckle: 8,
+            color_precision: 5,
+            layer_difference: 24,
+            ..base
+        },
+        // Mais camadas de cor e quase nenhum filtro: foto e degradê.
+        "alto" => vtracer::Config {
+            filter_speckle: 2,
+            color_precision: 8,
+            layer_difference: 8,
+            ..base
+        },
+        _ => base,
+    }
+}
+
+/// Vetoriza uma imagem raster em SVG (VTracer, nativo, 100% local).
+///
+/// A decodificação é feita aqui com o crate `image` do projeto em vez do
+/// `convert_image_to_svg` do VTracer: aquele traz um `image` 0.23 próprio, que
+/// não lê WebP, e dá a mesma mensagem de erro para qualquer falha.
+#[tauri::command]
+pub async fn vectorize_image(args: VectorizeArgs) -> Result<VectorizeResult, String> {
+    let inicio = std::time::Instant::now();
+    let src = Path::new(&args.input);
+    let img = image::open(src).map_err(|e| format!("falha ao abrir imagem: {e}"))?;
+    let (w0, h0) = (img.width(), img.height());
+    if w0 == 0 || h0 == 0 {
+        return Err("imagem vazia".to_string());
+    }
+
+    let maior = w0.max(h0);
+    let img = if maior > MAX_LADO_VETOR {
+        let f = MAX_LADO_VETOR as f32 / maior as f32;
+        img.resize(
+            ((w0 as f32 * f).round() as u32).max(1),
+            ((h0 as f32 * f).round() as u32).max(1),
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        img
+    };
+
+    // O VTracer keia o fundo transparente sozinho (procura uma cor não usada,
+    // pinta os pixels com alfa 0 e descarta esses clusters), então o RGBA tem
+    // que chegar inteiro — achatar o alfa aqui criaria o fundo branco que o
+    // roadmap proíbe.
+    let rgba = img.to_rgba8();
+    let entrada = vtracer::ColorImage {
+        width: rgba.width() as usize,
+        height: rgba.height() as usize,
+        pixels: rgba.into_raw(),
+    };
+    let traced_side = entrada.width.max(entrada.height) as u32;
+
+    let svg = vtracer::convert(entrada, config_vetor(args.detail.as_deref().unwrap_or("medio")))
+        .map_err(|e| format!("falha ao vetorizar: {e}"))?
+        .to_string();
+
+    let out_path = match args.out_path {
+        Some(p) => PathBuf::from(p),
+        None => std::env::temp_dir().join("camps-utils-vetor.svg"),
+    };
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&out_path, &svg).map_err(|e| format!("falha ao gravar SVG: {e}"))?;
+
+    Ok(VectorizeResult {
+        output_path: out_path.to_string_lossy().to_string(),
+        paths: svg.matches("<path").count(),
+        bytes: svg.len(),
+        width: w0,
+        height: h0,
+        traced_side,
+        duration_ms: inicio.elapsed().as_millis() as u64,
+    })
+}
+
+/// Copia um arquivo já gerado para o destino escolhido pelo usuário.
+///
+/// Existe para o fluxo "gera rascunho em temp → mostra prévia → salva": sem
+/// isto, salvar exigiria refazer o trabalho caro que a prévia já fez.
+#[tauri::command]
+pub async fn copy_file(from: String, to: String) -> Result<String, String> {
+    let dest = PathBuf::from(&to);
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    copy_or_skip(Path::new(&from), &dest)?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+// ─── Aumentar qualidade (Real-ESRGAN ncnn/Vulkan) ────────────────────────────
+
+/// Modelo do Real-ESRGAN e a escala que ele foi TREINADO para produzir.
+///
+/// A escala nativa não é decoração: o binário aceita `-s 2` com um modelo x4 e
+/// devolve uma imagem do tamanho pedido — **corrompida**. Medido com a amostra
+/// do upstream: `-s 2` no x4plus fica a 81,9 (0–255) de distância média de um
+/// Lanczos 2x, enquanto rodar 4x e reduzir fica a 8,2. Por isso a inferência é
+/// sempre na escala nativa e a redução é feita aqui.
+struct ModeloUpscale {
+    id: &'static str,
+    arquivo: &'static str,
+    escala_nativa: u32,
+}
+
+/// Um modelo hoje. Acrescentar outro (anime, animevideov3) é uma linha aqui +
+/// os dois arquivos no zip do módulo — nada na UI nem no fluxo muda.
+const MODELOS_UPSCALE: &[ModeloUpscale] = &[ModeloUpscale {
+    id: "geral",
+    arquivo: "realesrgan-x4plus",
+    escala_nativa: 4,
+}];
+
+const REALESRGAN_AUSENTE: &str =
+    "Módulo de aumento de qualidade (Real-ESRGAN) não instalado. Baixe em Configurações → Módulos.";
+
+/// Impede duas inferências ao mesmo tempo. A UI já desabilita o botão, mas o
+/// lock é o que garante a regra quando duas ferramentas (ou dois cliques que
+/// escaparam) chegam juntas: cada processo reserva VRAM para os pesos, e dois
+/// simultâneos derrubam justamente as máquinas mais fracas.
+static UPSCALE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[derive(serde::Deserialize)]
+pub struct UpscaleArgs {
+    input: String,
+    /// Destino. Ausente = rascunho em temp (fluxo da prévia).
+    out_path: Option<String>,
+    /// 2 ou 4. Outros valores caem em 4.
+    scale: Option<u32>,
+    /// Id de `MODELOS_UPSCALE`; ausente = o primeiro (geral).
+    model: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpscaleResult {
+    output_path: String,
+    width: u32,
+    height: u32,
+    out_width: u32,
+    out_height: u32,
+    duration_ms: u64,
+}
+
+/// Traduz a saída do binário em mensagem acionável. Sem isto, "falhou" é tudo
+/// o que sobra — e as duas causas de verdade (sem Vulkan, sem VRAM) têm
+/// respostas completamente diferentes para quem está na frente da tela.
+fn erro_do_realesrgan(cauda: &[String]) -> String {
+    let texto = cauda.join("\n");
+    let baixo = texto.to_lowercase();
+    if baixo.contains("vkcreateinstance")
+        || baixo.contains("no vulkan device")
+        || baixo.contains("failed to create vulkan")
+        || baixo.contains("vulkan device not found")
+    {
+        return "Sua placa de vídeo não tem suporte a Vulkan, ou o driver está desatualizado. \
+                O Real-ESRGAN precisa de Vulkan para funcionar — atualize o driver da placa e \
+                tente de novo."
+            .to_string();
+    }
+    if baixo.contains("out of memory") || baixo.contains("vkallocatememory") || baixo.contains("oom") {
+        return "A placa de vídeo ficou sem memória, mesmo processando a imagem em pedaços. \
+                Tente uma imagem menor ou a escala 2x."
+            .to_string();
+    }
+    if baixo.contains("decode image failed") || baixo.contains("unsupported") {
+        return "Não consegui ler esta imagem. Use PNG, JPG ou WebP.".to_string();
+    }
+    if texto.trim().is_empty() {
+        return "O Real-ESRGAN falhou sem dizer o motivo.".to_string();
+    }
+    format!("O Real-ESRGAN falhou: {}", texto.trim())
+}
+
+/// Roda o binário uma vez. `tile` = 0 deixa ele escolher pelo tamanho da VRAM.
+async fn realesrgan_run(
+    app: &AppHandle,
+    exe: &Path,
+    entrada: &Path,
+    saida: &Path,
+    modelo: &ModeloUpscale,
+    tile: u32,
+) -> Result<(), String> {
+    use std::process::Stdio;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let models_dir = exe.parent().unwrap_or(Path::new(".")).join("models");
+    let args = vec![
+        "-i".to_string(),
+        entrada.to_string_lossy().to_string(),
+        "-o".to_string(),
+        saida.to_string_lossy().to_string(),
+        "-n".to_string(),
+        modelo.arquivo.to_string(),
+        "-s".to_string(),
+        modelo.escala_nativa.to_string(),
+        "-m".to_string(),
+        models_dir.to_string_lossy().to_string(),
+        "-t".to_string(),
+        tile.to_string(),
+        "-f".to_string(),
+        "png".to_string(),
+    ];
+
+    let mut child = headless_command(exe)
+        .args(&args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Falha ao iniciar o Real-ESRGAN: {e}"))?;
+
+    // O binário escreve progresso E erro no mesmo stderr, então a leitura tem
+    // que fazer as duas coisas: emitir o que é porcentagem e guardar o resto.
+    let cauda = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::<String>::new()));
+    let leitor = child.stderr.take().map(|err| {
+        let app2 = app.clone();
+        let cauda2 = cauda.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(err).lines();
+            while let Ok(Some(linha)) = lines.next_line().await {
+                let t = linha.trim();
+                // "25,00%" — a vírgula é do locale da máquina, não um typo.
+                if let Some(num) = t.strip_suffix('%') {
+                    if let Ok(pct) = num.replace(',', ".").parse::<f32>() {
+                        let _ = app2.emit("tool-progress", pct.clamp(0.0, 100.0) as u32);
+                        continue;
+                    }
+                }
+                if let Ok(mut c) = cauda2.lock() {
+                    if c.len() == 12 {
+                        c.pop_front();
+                    }
+                    c.push_back(linha);
+                }
+            }
+        })
+    });
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    if let Some(h) = leitor {
+        let _ = h.await;
+    }
+    if !status.success() {
+        let linhas: Vec<String> = cauda.lock().map(|c| c.iter().cloned().collect()).unwrap_or_default();
+        return Err(erro_do_realesrgan(&linhas));
+    }
+    Ok(())
+}
+
+/// Aumenta a resolução de uma imagem com o Real-ESRGAN (ncnn/Vulkan, local).
+///
+/// **Memória:** o modelo vive no processo filho, que morre ao fim da chamada —
+/// RAM e VRAM voltam ao sistema incondicionalmente, sem depender de
+/// `gc.collect()` nem de `empty_cache()`. Vale inclusive quando a inferência
+/// falha, que é o caso em que a limpeza manual costuma ser esquecida.
+#[tauri::command]
+pub async fn upscale_image(app: AppHandle, args: UpscaleArgs) -> Result<UpscaleResult, String> {
+    let _guarda = UPSCALE_LOCK.lock().await;
+    let inicio = std::time::Instant::now();
+
+    let exe = resolve_realesrgan(&app).ok_or(REALESRGAN_AUSENTE)?;
+    let modelo = args
+        .model
+        .as_deref()
+        .and_then(|id| MODELOS_UPSCALE.iter().find(|m| m.id == id))
+        .unwrap_or(&MODELOS_UPSCALE[0]);
+    let escala = match args.scale {
+        Some(2) => 2,
+        _ => 4,
+    };
+
+    let entrada = PathBuf::from(&args.input);
+    let (w0, h0) = image::image_dimensions(&entrada)
+        .map_err(|e| format!("falha ao ler a imagem: {e}"))?;
+
+    let destino = match args.out_path {
+        Some(p) => PathBuf::from(p),
+        None => std::env::temp_dir().join("camps-utils-upscale.png"),
+    };
+    if let Some(parent) = destino.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    // A inferência sempre grava num arquivo próprio: quando a escala pedida é
+    // menor que a nativa, o resultado ainda precisa ser reduzido antes de virar
+    // o arquivo que o usuário vê.
+    let bruto = std::env::temp_dir().join("camps-utils-upscale-bruto.png");
+
+    // `-t 0` deixa o binário dimensionar o tile pela VRAM disponível. Se ainda
+    // assim faltar memória, uma segunda tentativa com tile pequeno costuma
+    // passar — é lento, mas é a diferença entre funcionar e não funcionar.
+    if let Err(e) = realesrgan_run(&app, &exe, &entrada, &bruto, modelo, 0).await {
+        if e.contains("sem memória") {
+            let _ = app.emit("tool-step", "Reduzindo o tamanho dos blocos e tentando de novo…");
+            realesrgan_run(&app, &exe, &entrada, &bruto, modelo, 128).await?;
+        } else {
+            std::fs::remove_file(&bruto).ok();
+            return Err(e);
+        }
+    }
+
+    let (out_w, out_h) = if escala == modelo.escala_nativa {
+        std::fs::rename(&bruto, &destino)
+            .or_else(|_| std::fs::copy(&bruto, &destino).map(|_| ()))
+            .map_err(|e| format!("falha ao gravar a imagem: {e}"))?;
+        std::fs::remove_file(&bruto).ok();
+        image::image_dimensions(&destino).map_err(|e| e.to_string())?
+    } else {
+        let img = image::open(&bruto).map_err(|e| format!("falha ao ler o resultado: {e}"))?;
+        let alvo_w = (w0 * escala).max(1);
+        let alvo_h = (h0 * escala).max(1);
+        img.resize_exact(alvo_w, alvo_h, image::imageops::FilterType::Lanczos3)
+            .save(&destino)
+            .map_err(|e| format!("falha ao gravar a imagem: {e}"))?;
+        // O arquivo bruto é 4x: em foto grande são dezenas de MB de temp que
+        // não servem mais para nada.
+        std::fs::remove_file(&bruto).ok();
+        (alvo_w, alvo_h)
+    };
+
+    let _ = app.emit("tool-progress", 100u32);
+    Ok(UpscaleResult {
+        output_path: destino.to_string_lossy().to_string(),
+        width: w0,
+        height: h0,
+        out_width: out_w,
+        out_height: out_h,
+        duration_ms: inicio.elapsed().as_millis() as u64,
+    })
+}
+
 /// Generates a QR code PNG for the given text. Returns the output path.
 #[tauri::command]
 pub async fn generate_qr(text: String, out_path: String, size: Option<u32>) -> Result<String, String> {
@@ -1613,6 +2089,126 @@ mod tests {
         assert!(out_ico.metadata().unwrap().len() > 0);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn bloco(dir: &Path, nome: &str, alfa_fora: u8) -> PathBuf {
+        // Quadrado opaco no meio; a borda fica transparente quando alfa_fora=0.
+        let mut raw = image::RgbaImage::new(64, 64);
+        for (x, y, p) in raw.enumerate_pixels_mut() {
+            let dentro = (12..52).contains(&x) && (12..52).contains(&y);
+            *p = if dentro {
+                image::Rgba([220, 30, 30, 255])
+            } else {
+                image::Rgba([255, 255, 255, alfa_fora])
+            };
+        }
+        let path = dir.join(nome);
+        image::DynamicImage::ImageRgba8(raw).save(&path).unwrap();
+        path
+    }
+
+    fn vetorizar(args: VectorizeArgs) -> VectorizeResult {
+        tokio::runtime::Runtime::new().unwrap().block_on(vectorize_image(args)).unwrap()
+    }
+
+    /// O critério do roadmap: SVG com geometria de verdade. Um `<image>` com PNG
+    /// em base64 dentro de um `<svg>` passaria por "vetorizado" na tela e falharia
+    /// em qualquer ampliação — é exatamente o que este teste recusa.
+    #[test]
+    fn vetoriza_gera_paths_e_nao_raster_embutido() {
+        let dir = std::env::temp_dir().join(format!("camps_vetor_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = bloco(&dir, "opaco.png", 255);
+        let out = dir.join("saida.svg");
+
+        let r = vetorizar(VectorizeArgs {
+            input: src.to_string_lossy().to_string(),
+            out_path: Some(out.to_string_lossy().to_string()),
+            detail: None,
+        });
+
+        let svg = std::fs::read_to_string(&out).unwrap();
+        assert!(r.paths >= 1, "nenhum path gerado");
+        assert!(svg.contains("<path"), "sem geometria: {}", &svg[..svg.len().min(200)]);
+        assert!(!svg.contains("<image"), "raster embutido no SVG");
+        assert!(!svg.contains("base64"), "raster embutido no SVG");
+        // Dimensões relatadas são as do ORIGINAL, não as do traçado — é o que a
+        // UI mostra ao usuário.
+        assert_eq!((r.width, r.height), (64, 64));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Fundo transparente não pode virar um path branco cobrindo tudo: o SVG do
+    /// PNG com alfa tem que ter MENOS área pintada que o mesmo desenho opaco.
+    #[test]
+    fn vetoriza_preserva_transparencia() {
+        let dir = std::env::temp_dir().join(format!("camps_vetor_alfa_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let opaco = vetorizar(VectorizeArgs {
+            input: bloco(&dir, "opaco.png", 255).to_string_lossy().to_string(),
+            out_path: Some(dir.join("opaco.svg").to_string_lossy().to_string()),
+            detail: None,
+        });
+        let transp = vetorizar(VectorizeArgs {
+            input: bloco(&dir, "transp.png", 0).to_string_lossy().to_string(),
+            out_path: Some(dir.join("transp.svg").to_string_lossy().to_string()),
+            detail: None,
+        });
+
+        assert!(transp.paths >= 1, "o desenho sumiu junto com o fundo");
+        assert!(
+            transp.paths < opaco.paths,
+            "fundo transparente virou path ({} vs {} opaco)",
+            transp.paths,
+            opaco.paths
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn erro_do_realesrgan_separa_vulkan_de_memoria() {
+        // As duas causas reais têm respostas opostas para quem está na tela:
+        // uma pede driver, a outra pede imagem menor. Trocá-las é pior que não
+        // dizer nada.
+        let sem_vulkan = erro_do_realesrgan(&["vkCreateInstance failed -9".to_string()]);
+        assert!(sem_vulkan.contains("Vulkan"), "{sem_vulkan}");
+        assert!(sem_vulkan.contains("driver"), "{sem_vulkan}");
+
+        let sem_vram = erro_do_realesrgan(&["vkAllocateMemory failed: out of memory".to_string()]);
+        assert!(sem_vram.contains("memória"), "{sem_vram}");
+        assert!(!sem_vram.contains("Vulkan"), "confundiu VRAM com falta de suporte: {sem_vram}");
+
+        // Desconhecido sai cru: uma linha do binário é sempre melhor que
+        // "falhou", e sem ela não há como diagnosticar depois.
+        let outro = erro_do_realesrgan(&["find_blob_index_by_name data failed".to_string()]);
+        assert!(outro.contains("find_blob_index_by_name"), "{outro}");
+
+        let vazio = erro_do_realesrgan(&[]);
+        assert!(vazio.contains("sem dizer o motivo"), "{vazio}");
+    }
+
+    /// O binário aceita `-s 2` num modelo x4 e devolve imagem corrompida do
+    /// tamanho certo (medido: 81,9 de distância média contra 8,2 do caminho
+    /// 4x+redução). Todo o desenho do `upscale_image` depende de a escala
+    /// nativa declarada aqui bater com o modelo de verdade.
+    #[test]
+    fn modelo_de_upscale_declara_escala_nativa() {
+        let geral = &MODELOS_UPSCALE[0];
+        assert_eq!(geral.id, "geral");
+        assert_eq!(geral.arquivo, "realesrgan-x4plus");
+        assert_eq!(geral.escala_nativa, 4);
+    }
+
+    #[test]
+    fn niveis_de_detalhe_sao_diferentes() {
+        let (b, m, a) = (config_vetor("baixo"), config_vetor("medio"), config_vetor("alto"));
+        assert!(b.filter_speckle > m.filter_speckle && m.filter_speckle > a.filter_speckle);
+        assert!(b.color_precision < a.color_precision);
+        // Rótulo desconhecido cai no médio em vez de explodir.
+        assert_eq!(config_vetor("xpto").color_precision, m.color_precision);
     }
 
     /// Imagem de ruído: um gradiente liso comprimiria abaixo do alvo já em

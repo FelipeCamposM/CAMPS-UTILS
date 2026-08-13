@@ -3,7 +3,10 @@
 Estado vivo da implementação. Spec formal: `spec/novas-funcoes/camps-utils-spec.md`.
 Última atualização: 2026-08-08.
 
-> **Fase 4 planejada** em `roadmaps/ia-local/roadmap.md` — legenda automática, voz e imagem com IA
+> **Próxima entrega (2026-08-13):** `roadmaps/removebg-vtracer-realesrgan/roadmap.md` — vetorizar
+> (VTracer), aumentar qualidade (Real-ESRGAN) e remover fundo (rembg). Tem prioridade sobre a Fase 4.
+>
+> **Fase 4 (em espera)** em `roadmaps/ia-local/roadmap.md` — legenda automática, voz e imagem com IA
 > local, tudo em cima do `RemoteModule` que esta fase construiu. Prompt de arranque:
 > `roadmaps/ia-local/PROMPT.md`.
 
