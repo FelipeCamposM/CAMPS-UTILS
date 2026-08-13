@@ -4,6 +4,7 @@ import type { AppSettings } from "../types/settings";
 import { DEFAULT_SETTINGS } from "../types/settings";
 import { loadSettings, saveSettings } from "../services/settingsService";
 import { setMotionLevel } from "../lib/motion";
+import { coresDaPaleta, hexParaRgbCss } from "../lib/palettes";
 import { isBackgroundEffect } from "../components/backgrounds/registry";
 
 export function useSettings() {
@@ -26,21 +27,36 @@ export function useSettings() {
     saveSettings({ ...DEFAULT_SETTINGS });
   }, []);
 
-  // Tema: o atributo data-theme no <html> troca as CSS vars (ver index.css).
+  // Tema + paleta de cor. Andam juntos de propósito: a paleta tem variante
+  // para o tema claro, então quem resolve "sistema → claro/escuro" é também
+  // quem sabe qual variante escrever. Separar em dois efeitos deixaria a cor
+  // um render atrás do tema ao seguir o Windows.
   useEffect(() => {
     const root = document.documentElement;
+
+    const aplicar = (claro: boolean) => {
+      root.dataset.theme = claro ? "claro" : "escuro";
+      const { base, deep } = coresDaPaleta(settings.accent, claro);
+      // Sobrescreve as vars do index.css no próprio <html>. Inline e não uma
+      // regra `[data-accent]` no CSS porque a tabela de paletas já precisa
+      // existir em TS para alimentar os efeitos em WebGL — duplicá-la no CSS
+      // é convite para as duas divergirem.
+      root.style.setProperty("--c-accent", hexParaRgbCss(base));
+      root.style.setProperty("--c-accent-hover", hexParaRgbCss(deep));
+      root.style.setProperty("--c-selected", hexParaRgbCss(base));
+      root.style.setProperty("--c-selected-deep", hexParaRgbCss(deep));
+    };
+
     if (settings.theme !== "sistema") {
-      root.dataset.theme = settings.theme;
+      aplicar(settings.theme === "claro");
       return;
     }
     const media = window.matchMedia?.("(prefers-color-scheme: light)");
-    const apply = () => {
-      root.dataset.theme = media?.matches ? "claro" : "escuro";
-    };
-    apply();
-    media?.addEventListener("change", apply);
-    return () => media?.removeEventListener("change", apply);
-  }, [settings.theme]);
+    const seguirSistema = () => aplicar(!!media?.matches);
+    seguirSistema();
+    media?.addEventListener("change", seguirSistema);
+    return () => media?.removeEventListener("change", seguirSistema);
+  }, [settings.theme, settings.accent]);
 
   // Aparência: fundo, intensidade do vidro e movimento (ver index.css).
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { PALETA_PADRAO } from "../lib/palettes";
+
 export type Theme = "escuro" | "claro" | "sistema";
 /**
  * Fundos estáticos (CSS, em `src/index.css`) mais qualquer id de efeito
@@ -39,6 +41,12 @@ export interface AppSettings {
   maxFileSizeMb: number;
 
   // Aparência
+  /**
+   * Id da paleta de cor (ver `src/lib/palettes.ts`). Vale para ícones, foco,
+   * opção selecionada, barra de rolagem e os fundos animados — id desconhecido
+   * cai na primeira paleta em vez de deixar o app sem cor.
+   */
+  accent: string;
   background: Background;
   /** Caminho no disco; só usado quando background === "custom". */
   backgroundPath: string;
@@ -46,6 +54,13 @@ export interface AppSettings {
   backgroundBlur: number; // px, 0..40
   glass: GlassLevel;
   animations: MotionLevel;
+
+  /**
+   * Última versão cujas novidades o usuário já viu. Vazio = nunca viu, que é
+   * o estado de quem instala pela primeira vez — daí o aviso aparecer uma vez
+   * e só voltar quando houver versão nova. Ver `src/lib/changelog.ts`.
+   */
+  lastSeenVersion: string;
 
   // Documentos
   autoSaveNextToPdf: boolean;
@@ -94,12 +109,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openFolderAfterSave: false,
   maxFileSizeMb: 100,
 
+  accent: PALETA_PADRAO,
   background: "mesh-1",
   backgroundPath: "",
   backgroundOpacity: 35,
   backgroundBlur: 12,
   glass: "medio",
   animations: "completas",
+
+  lastSeenVersion: "",
 
   autoSaveNextToPdf: false,
 

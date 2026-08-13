@@ -1,7 +1,7 @@
 {
   "name": "camps-utils",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "setup": "powershell -ExecutionPolicy Bypass -File scripts\\setup.ps1",

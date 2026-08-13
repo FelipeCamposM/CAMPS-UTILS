@@ -2,6 +2,7 @@ import { Component, Suspense } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import type { AppSettings } from "../../types/settings";
 import { motionOn } from "../../lib/motion";
+import { coresDoEfeito } from "../../lib/palettes";
 import { getBackgroundEffect } from "./registry";
 
 /**
@@ -29,7 +30,15 @@ export function AppBackground({ settings }: { settings: AppSettings }) {
           <Suspense fallback={null}>
             {/* Movimento desligado (ou prefers-reduced-motion): o efeito continua
                 desenhado, só congela. Sumir com ele deixaria o app chapado. */}
-            <Efeito className="h-full w-full" still={!motionOn()} />
+            {/* `key` força remontar ao trocar de paleta: os efeitos montam o
+                material do WebGL uma vez, e mudar a cor por prop não repinta
+                o que já está na GPU. */}
+            <Efeito
+              key={settings.accent}
+              className="h-full w-full"
+              still={!motionOn()}
+              cores={coresDoEfeito(settings.accent)}
+            />
           </Suspense>
         </EffectBoundary>
       </div>

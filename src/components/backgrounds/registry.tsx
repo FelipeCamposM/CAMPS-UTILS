@@ -1,5 +1,6 @@
 import { lazy, useEffect, useRef } from "react";
 import type { ComponentType, LazyExoticComponent } from "react";
+import type { CoresEfeito } from "../../lib/palettes";
 
 /**
  * Registro dos fundos animados (React Bits). Mesmo padrão do
@@ -10,7 +11,8 @@ import type { ComponentType, LazyExoticComponent } from "react";
  * 1. `pnpm dlx shadcn@latest add @react-bits/<Nome>-TS-TW`
  *    (cai em `src/components/<Nome>/<Nome>.tsx` — ver components.json)
  * 2. Adicione uma entrada em BACKGROUND_EFFECTS abaixo, com os props do
- *    preset já embutidos no `lazy(...)`.
+ *    preset já embutidos no `lazy(...)`. As cores saem de `cores` (paleta do
+ *    usuário), nunca hexadecimal fixo — senão o efeito ignora a escolha dele.
  * 3. Só isso. O `<AppBackground>` monta, as Configurações listam, e as
  *    settings aceitam o novo id porque `Background` é string.
  *
@@ -26,6 +28,12 @@ export interface BackgroundEffectProps {
   className?: string;
   /** true = renderiza parado (o usuário desligou animações ou o SO pediu). */
   still?: boolean;
+  /**
+   * Cores derivadas da paleta escolhida (`src/lib/palettes.ts`). Vêm por prop
+   * porque canvas WebGL não enxerga CSS var — o efeito precisa do hexadecimal
+   * na mão. Quem monta é o `<AppBackground>`.
+   */
+  cores: CoresEfeito;
 }
 
 export interface BackgroundEffect {
@@ -39,13 +47,13 @@ export interface BackgroundEffect {
 const GradientWavesPreset = lazy(async () => {
   const { default: GradientWaves } = await import("../GradientWaves/GradientWaves");
   return {
-    default: ({ className, still }: BackgroundEffectProps) => (
+    default: ({ className, still, cores }: BackgroundEffectProps) => (
       <GradientWaves
         className={className}
         speed={still ? 0 : 0.4}
-        horizonColor="#8944ff"
-        waveColor="#A855F7"
-        crestColor="#8300ff"
+        horizonColor={cores.ondas.horizonte}
+        waveColor={cores.ondas.onda}
+        crestColor={cores.ondas.crista}
         amplitude={1.25}
         waveScale={1.6}
         waveRatio={1.3}
@@ -112,14 +120,14 @@ function usePointerBridge(ativo: boolean) {
 const FloatingLinesPreset = lazy(async () => {
   const { default: FloatingLines } = await import("../FloatingLines");
   return {
-    default: ({ className, still }: BackgroundEffectProps) => {
+    default: ({ className, still, cores }: BackgroundEffectProps) => {
       const hostRef = usePointerBridge(!still);
       return (
         // O FloatingLines não aceita `className` (é `w-full h-full` fixo), daí
         // o wrapper — que também ancora a ponte de ponteiro.
         <div ref={hostRef} className={className}>
           <FloatingLines
-            linesGradient={["#7C3AED", "#A855F7", "#c73bf6"]}
+            linesGradient={cores.linhas}
             animationSpeed={still ? 0 : 0.6}
             interactive={!still}
             bendRadius={5}

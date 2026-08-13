@@ -2,12 +2,16 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { CATEGORY_ORDER, CATEGORY_LABELS, toolsByCategory } from "../tools/registry";
 import { useStagger } from "../lib/motion";
+import { NovidadesAviso } from "./Novidades";
 
 interface HomeProps {
   onSelect: (id: string) => void;
+  /** Última versão cujas novidades o usuário já viu (`settings.lastSeenVersion`). */
+  ultimaVersaoVista: string;
+  onNovidadesVistas: (versao: string) => void;
 }
 
-export function Home({ onSelect }: HomeProps) {
+export function Home({ onSelect, ultimaVersaoVista, onNovidadesVistas }: HomeProps) {
   const gridRef = useStagger<HTMLDivElement>("[data-tool-card]");
 
   return (
@@ -18,6 +22,8 @@ export function Home({ onSelect }: HomeProps) {
           Ferramentas de conversão locais. Escolha uma ferramenta para começar.
         </p>
       </div>
+
+      <NovidadesAviso ultimaVista={ultimaVersaoVista} onVisto={onNovidadesVistas} />
 
       {CATEGORY_ORDER.map((category) => {
         const tools = toolsByCategory(category);

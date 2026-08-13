@@ -91,6 +91,33 @@ describe("NotificationBell", () => {
     expect(abrir).toHaveBeenCalledWith("sobre");
   });
 
+  it("a lista é renderizada fora do container do sino (portal)", async () => {
+    // A `<aside>` da barra lateral é `.glass`, e `backdrop-filter` cria
+    // contexto de empilhamento: filha dela, a lista fica presa atrás do
+    // conteúdo da página por mais z-index que tenha. Só o portal resolve —
+    // devolver a lista para dentro do sino traz o bug visual de volta.
+    ffmpegInstalled.mockResolvedValue(false);
+    const { container } = render(<NotificationBell onOpenSettings={vi.fn()} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /1 pendência/i }));
+
+    const lista = screen.getByRole("dialog", { name: /notificações/i });
+    expect(container).not.toContainElement(lista);
+    expect(document.body).toContainElement(lista);
+  });
+
+  it("clicar dentro da lista não a fecha", async () => {
+    // Com o portal, a lista deixou de ser descendente do sino: olhar só o ref
+    // do sino no clique-fora fecharia o popover ao clicar nele mesmo.
+    ffmpegInstalled.mockResolvedValue(false);
+    render(<NotificationBell onOpenSettings={vi.fn()} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /1 pendência/i }));
+    await userEvent.click(screen.getByRole("dialog", { name: /notificações/i }));
+
+    expect(screen.getByRole("dialog", { name: /notificações/i })).toBeInTheDocument();
+  });
+
   it("checagem que falha não vira pendência", async () => {
     // Sem internet o usuário não pode fazer nada — alerta permanente só irrita.
     check.mockRejectedValue(new Error("sem rede"));

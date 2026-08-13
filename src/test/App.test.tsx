@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../App";
+import { hexParaRgbCss } from "../lib/palettes";
+import { NOVIDADES } from "../lib/changelog";
 
 const mockInvoke = vi.mocked((await import("@tauri-apps/api/core")).invoke);
 const mockOpen = vi.mocked((await import("@tauri-apps/plugin-dialog")).open);
@@ -152,6 +154,44 @@ describe("Histórico", () => {
   });
 });
 
+describe("Novidades da versão", () => {
+  it("aparece no Início e some depois de visto", async () => {
+    // O mock global devolve "0.1.0", versão sem entrada escrita — por isso os
+    // outros testes não veem o cartão.
+    const { getVersion } = await import("@tauri-apps/api/app");
+    vi.mocked(getVersion).mockResolvedValue(NOVIDADES[0].versao);
+
+    const { unmount } = render(<App />);
+
+    const cartao = await screen.findByText(
+      new RegExp(`novidades da versão ${NOVIDADES[0].versao}`, "i")
+    );
+    expect(cartao).toBeInTheDocument();
+    // O texto é o do arquivo, não um resumo genérico.
+    expect(screen.getByText(NOVIDADES[0].itens[0])).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /entendi/i }));
+    expect(screen.queryByText(/novidades da versão/i)).not.toBeInTheDocument();
+
+    // Persistiu: remontar o app não traz o cartão de volta.
+    unmount();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^início$/i })).toBeInTheDocument());
+    expect(screen.queryByText(/novidades da versão/i)).not.toBeInTheDocument();
+  });
+
+  it("o histórico completo fica em Configurações → Sobre", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /^configurações$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^sobre$/i }));
+
+    // Todas as versões escritas, não só a instalada.
+    for (const n of NOVIDADES) {
+      expect(screen.getByText(`Versão ${n.versao}`)).toBeInTheDocument();
+    }
+  });
+});
+
 describe("Configurações", () => {
   async function openSettings() {
     await userEvent.click(screen.getByRole("button", { name: /^configurações$/i }));
@@ -163,6 +203,36 @@ describe("Configurações", () => {
     await userEvent.click(screen.getByRole("button", { name: /^aparência$/i }));
     await userEvent.click(screen.getByRole("button", { name: /^claro$/i }));
     expect(document.documentElement.dataset.theme).toBe("claro");
+  });
+
+  it("a cor de destaque escolhida vai para as CSS vars", async () => {
+    // A paleta é escrita inline no <html> pelo useSettings. Se parar de ser,
+    // o seletor continua marcando a cor e nada muda na tela.
+    render(<App />);
+    await openSettings();
+    await userEvent.click(screen.getByRole("button", { name: /^aparência$/i }));
+
+    await userEvent.click(screen.getByRole("radio", { name: /^âmbar$/i }));
+
+    const estilo = document.documentElement.style;
+    expect(estilo.getPropertyValue("--c-accent")).toBe(hexParaRgbCss("#FBBF24"));
+    // Ícone e "opção ligada" andam juntos: é o pedido de "tudo daquela cor".
+    expect(estilo.getPropertyValue("--c-selected")).toBe(hexParaRgbCss("#FBBF24"));
+    expect(estilo.getPropertyValue("--c-selected-deep")).toBe(hexParaRgbCss("#D97706"));
+  });
+
+  it("no tema claro a paleta usa a variante de contraste", async () => {
+    render(<App />);
+    await openSettings();
+    await userEvent.click(screen.getByRole("button", { name: /^aparência$/i }));
+
+    await userEvent.click(screen.getByRole("radio", { name: /^ciano$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^claro$/i }));
+
+    // #22D3EE sobre fundo branco não passa contraste; a variante é #0E7490.
+    expect(document.documentElement.style.getPropertyValue("--c-accent")).toBe(
+      hexParaRgbCss("#0E7490")
+    );
   });
 
   it("aplica fundo, vidro e animações no documento", async () => {

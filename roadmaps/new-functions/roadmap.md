@@ -173,6 +173,74 @@ errado para vídeo curto.
 - `ResizeObserver` guardado — não existe no jsdom e o ReferenceError derrubava a tool inteira.
 - Verificação: pytest **96/96** (subtitles 47), vitest **51/51**, cargo **8/8**, build ok.
 
+### Novidades da versão, para o usuário (2026-08-13) — **1.1.0**
+
+Pedido: mostrar dentro do app o que mudou em cada versão, "de forma bem simples, sem coisas
+técnicas".
+
+- **`src/lib/changelog.ts` (novo)** — uma entrada por versão (`versao`, `data`, `itens[]`), mais
+  recente no topo. Conteúdo em linguagem de usuário: o que ele passou a conseguir fazer, não o que
+  mudou no código.
+- **Dois lugares, um componente** (`src/components/Novidades.tsx`): cartão dispensável no **Início**
+  na primeira abertura após atualizar, e a lista completa em **Configurações → Sobre**.
+  Cartão e não modal de propósito — novidade não é pendência, e travar a tela de quem abriu o app
+  para converter um arquivo é pior que não avisar.
+- `settings.lastSeenVersion` guarda o que já foi visto; "Entendi" grava a versão e o cartão não
+  volta. Quem instala pela primeira vez vê uma vez (campo vazio).
+- **Versão sem entrada escrita não mostra nada.** Esquecer de escrever a novidade vira silêncio, não
+  um cartão vazio.
+- ⚠️ **Teste que reprova jargão** (`changelog.test.ts`): nenhum item pode conter "rembg", "ONNX",
+  "API", "cache", "build", "commit"… É a regra que mais se perde quando alguém escreve a entrada
+  com o commit aberto do lado. Formato de arquivo (PNG, SVG) fica de fora da lista de proibidas —
+  é vocabulário de quem usa.
+- Fora do Tauri o `getVersion()` falha e vira `null` → sem versão, sem aviso. É por isso que o
+  cartão não aparece em `npm run dev:vite`.
+- `CLAUDE.md`: o passo a passo de release ganhou "escrever as novidades" como passo 2, e o passo 1
+  passou a citar o `VERSION` + `npm run version:sync` (que já existiam e não estavam documentados
+  ali).
+
+**Versão 1.0.1 → 1.1.0** (`VERSION` + `npm run version:sync` nos três arquivos; `cargo check`
+atualizou o `Cargo.lock`). Minor e não patch: três ferramentas novas de imagem e a cor
+personalizável.
+
+**Verificado:** vitest **104/104** (7 novos em `changelog.test.ts` + 2 em `App.test.tsx` — o cartão
+aparece, some ao ser visto e não volta depois de remontar; a lista completa está em Sobre),
+typecheck limpo, `cargo check` ok. Conferido no navegador: a lista das 4 versões aparece em Sobre.
+
+### Cor de destaque escolhida pelo usuário (2026-08-13)
+
+Pedido: poder trocar a cor do app e ter **ícones, barra de rolagem e os fundos animados** todos na
+cor escolhida. 8 paletas em Configurações → Aparência → **Cor de destaque** (amostras redondas com
+o degradê da paleta, não rótulos de texto — a cor é o próprio rótulo).
+
+- **`src/lib/palettes.ts` (novo) é a fonte única.** Cada paleta declara **duas** cores (`base` e
+  `deep`) mais uma variante `claro`; o resto é derivado (`coresDoEfeito`). Derivar em vez de listar:
+  eram 5 cores por paleta × 8 paletas, e paleta nova com metade das cores esquecidas seria o
+  defeito mais provável. Os fatores foram calibrados para reproduzir o roxo original
+  (`#8944ff`/`#A855F7`/`#8300ff` nas ondas, `#7C3AED`/`#A855F7`/`#c73bf6` nas linhas).
+- **Por que a tabela mora em TS e não como `[data-accent]` no CSS:** canvas WebGL não enxerga CSS
+  var. Os efeitos precisam do hexadecimal na mão, então a tabela teria de existir em TS de
+  qualquer jeito — e duas tabelas divergem no dia em que alguém mexe num lado só. O `useSettings`
+  escreve `--c-accent`, `--c-accent-hover`, `--c-selected` e `--c-selected-deep` inline no `<html>`.
+- **Tema e paleta viraram um efeito só.** A paleta tem variante para o tema claro, então quem
+  resolve "sistema → claro/escuro" é quem sabe qual variante escrever; em dois efeitos a cor ficaria
+  um render atrás do tema ao seguir o Windows.
+- ⚠️ **`key={settings.accent}` no `<AppBackground>`**: os efeitos montam o material do WebGL uma
+  vez, e trocar a cor por prop não repinta o que já está na GPU. Sem o remonte, a interface muda de
+  cor e o fundo continua roxo.
+- ⚠️ **Variante `claro` é obrigatória** e há teste que reprova paleta sem ela: `#22D3EE` (Ciano)
+  sobre fundo branco não passa contraste, e o defeito só apareceria para quem usa o tema claro.
+- **Mudança no visual padrão:** `--c-accent` era índigo (`#818CF8`) e `--c-selected` roxo. Como o
+  pedido é "tudo da mesma cor", cada paleta é de um tom só — no padrão "Roxo" os ícones passaram de
+  índigo para roxo. O índigo antigo continua disponível como a paleta **"Índigo"**.
+- Já reagem sozinhos (usavam os tokens): rolagem (`.scrollbar`), neon do item ativo, barras de
+  progresso, foco, `.btn-primary` e o segmentado.
+
+**Verificado:** vitest **95/95** (9 novos em `palettes.test.ts` + 2 em `App.test.tsx` travando as
+CSS vars e a variante do tema claro), typecheck limpo, e conferido no navegador: paleta Verde
+deixou ícones, botões, sliders e **o canvas das Ondas e das Linhas flutuantes** verdes; no tema
+claro o Ciano cai para `#0E7490` e o texto branco continua legível.
+
 ### Select próprio (2026-08-09)
 
 O `<select>` nativo tinha um dropdown fora do tema: a lista é desenhada pelo **sistema operacional**,

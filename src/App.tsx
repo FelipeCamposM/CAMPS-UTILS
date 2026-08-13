@@ -88,7 +88,11 @@ export function App() {
                 )}
               </div>
             ) : (
-              <Home onSelect={openTool} />
+              <Home
+                onSelect={openTool}
+                ultimaVersaoVista={settings.lastSeenVersion}
+                onNovidadesVistas={(versao) => updateSettings({ lastSeenVersion: versao })}
+              />
             )}
           </div>
         </main>

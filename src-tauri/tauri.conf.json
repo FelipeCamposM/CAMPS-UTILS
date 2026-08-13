@@ -1,6 +1,6 @@
 {
   "productName": "CAMPS-UTILS",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "identifier": "com.camps.utils",
   "build": {
     "frontendDist": "../dist",

@@ -1,11 +1,23 @@
 import { Bell } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNotifications } from "../hooks/useNotifications";
 import type { SettingsSection } from "../hooks/useNotifications";
 
 /**
  * Sino de pendências no topo da barra lateral. Só avisa e leva até
  * Configurações — quem instala é o card de lá (ver `useNotifications`).
+ *
+ * ⚠️ **A lista vai num portal para o `<body>`, e não é firula.** A `<aside>` é
+ * `.glass`, e `backdrop-filter` **cria contexto de empilhamento**: dentro dela,
+ * `z-50` só compete com os irmãos da própria barra. O conteúdo da página é
+ * irmão POSTERIOR no DOM, então dropzone, cards e botões pintavam por cima do
+ * popover — o `z-50` estava lá e não adiantava nada. Subir o z-index da barra
+ * "resolveria" e quebraria o modal de zoom do PDF, que hoje passa por cima
+ * dela. O portal tira a lista da armadilha sem mexer em mais nada.
+ *
+ * O preço do portal é posicionar à mão (`fixed` + medida do botão) e olhar dois
+ * refs no clique-fora, porque a lista deixa de ser filha do sino.
  */
 export function NotificationBell({
   onOpenSettings,
@@ -15,6 +27,28 @@ export function NotificationBell({
   const itens = useNotifications();
   const [aberto, setAberto] = useState(false);
   const caixaRef = useRef<HTMLDivElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
+  const botaoRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const medir = useCallback(() => {
+    const r = botaoRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 8, left: r.left });
+  }, []);
+
+  // `useLayoutEffect` e não `useEffect`: medir depois da pintura mostraria a
+  // lista por um quadro no canto superior esquerdo antes de saltar para o lugar.
+  useLayoutEffect(() => {
+    if (aberto) medir();
+  }, [aberto, medir]);
+
+  // A barra é `sticky` e ocupa a altura toda, então a posição do sino só muda
+  // quando a janela muda de tamanho.
+  useEffect(() => {
+    if (!aberto) return;
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [aberto, medir]);
 
   // Fecha ao clicar fora e no Esc — um popover que só fecha no próprio botão
   // vira armadilha quando o usuário já seguiu para outra coisa.
@@ -22,7 +56,11 @@ export function NotificationBell({
     if (!aberto) return;
 
     function onDown(e: PointerEvent) {
-      if (!caixaRef.current?.contains(e.target as Node)) setAberto(false);
+      const alvo = e.target as Node;
+      // Dois refs: com o portal, a lista não é mais descendente do sino, e
+      // olhar só o `caixaRef` fecharia o popover ao clicar dentro dele.
+      if (caixaRef.current?.contains(alvo) || listaRef.current?.contains(alvo)) return;
+      setAberto(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setAberto(false);
@@ -42,6 +80,7 @@ export function NotificationBell({
   return (
     <div ref={caixaRef} className="relative shrink-0">
       <button
+        ref={botaoRef}
         onClick={() => setAberto((v) => !v)}
         aria-label={
           temPendencia
@@ -69,11 +108,13 @@ export function NotificationBell({
         )}
       </button>
 
-      {aberto && (
+      {aberto && pos && createPortal(
         <div
+          ref={listaRef}
           role="dialog"
           aria-label="Notificações"
-          className="popover absolute left-0 top-full mt-2 w-64 z-50 p-2 space-y-1"
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          className="popover w-64 z-50 p-2 space-y-1"
         >
           {total === 0 ? (
             <p className="text-text-muted text-xs px-2 py-3 text-center">
@@ -94,7 +135,8 @@ export function NotificationBell({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -42,17 +42,18 @@
     --c-bg-elevated: 30 30 40;
     --c-border-subtle: 42 42 54;
     --c-border: 54 54 74;
-    --c-accent: 129 140 248;
-    --c-accent-hover: 99 102 241;
+    --c-accent: 168 85 247;
+    --c-accent-hover: 131 0 255;
     --c-text-primary: 226 226 236;
     --c-text-secondary: 136 136 168;
     --c-text-muted: 85 85 106;
 
-    /* Roxo do gradiente de ondas (#A855F7 → #8300ff, ver
-       src/components/backgrounds/registry.tsx). É a cor de OPÇÃO SELECIONADA
-       — separada do accent de propósito: "esta opção está ligada" não é a
-       mesma coisa que "esta é a ação principal", e o índigo do accent lia
-       igual aos dois. */
+    /* Cor de OPÇÃO SELECIONADA (item ativo do menu, barra de rolagem, neon).
+       ⚠️ Estes quatro valores — accent, accent-hover, selected, selected-deep —
+       são SOBRESCRITOS no <html> pelo `useSettings` a partir da paleta
+       escolhida (`src/lib/palettes.ts`). O que está aqui é o fallback de quem
+       renderiza antes do primeiro efeito, e a paleta "roxo" repete estes
+       valores de propósito. Mudar a cor do app se faz LÁ, não aqui. */
     --c-selected: 168 85 247;
     --c-selected-deep: 131 0 255;
 
@@ -84,10 +85,11 @@
     --c-bg-elevated: 240 240 245;
     --c-border-subtle: 224 224 232;
     --c-border: 198 198 212;
-    --c-accent: 79 70 229;
-    --c-accent-hover: 67 56 202;
     /* Roxo mais fechado: texto branco sobre violet-500 não passa contraste
-       num fundo claro. violet-600 → violet-700. */
+       num fundo claro. violet-600 → violet-700. É a variante `claro` da
+       paleta "roxo" — os quatro valores são sobrescritos pelo useSettings. */
+    --c-accent: 124 58 237;
+    --c-accent-hover: 109 40 217;
     --c-selected: 124 58 237;
     --c-selected-deep: 109 40 217;
     --c-text-primary: 24 24 32;

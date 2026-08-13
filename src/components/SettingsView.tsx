@@ -12,9 +12,11 @@ import { MAX_FILE_SIZE_LIMIT_MB } from "../types/settings";
 import { MODULES, useModule } from "./ModuleGate";
 import type { ModuleId } from "./ModuleGate";
 import { UpdateCard } from "./UpdateCard";
+import { NovidadesLista } from "./Novidades";
 import { storageUsedBytes } from "../services/settingsService";
 import { TOOLS } from "../tools/registry";
 import { BACKGROUND_EFFECTS, isBackgroundEffect } from "./backgrounds/registry";
+import { PALETAS } from "../lib/palettes";
 import { Button, Field, Input, SegmentedControl, Select, Slider } from "./ui";
 
 type SectionId =
@@ -221,6 +223,38 @@ function AparenciaSection({ settings, onChange }: SectionProps) {
           value={settings.theme}
           onChange={(v) => onChange({ theme: v })}
         />
+
+        <Divider />
+
+        <Field
+          label="Cor de destaque"
+          description="Vale para os ícones, a barra de rolagem, o item ativo do menu e os fundos animados (Ondas e Linhas flutuantes)."
+        >
+          <div role="radiogroup" aria-label="Cor de destaque" className="flex flex-wrap gap-2">
+            {PALETAS.map((p) => {
+              const ativa = settings.accent === p.id;
+              return (
+                <button
+                  key={p.id}
+                  role="radio"
+                  aria-checked={ativa}
+                  aria-label={p.label}
+                  title={p.label}
+                  onClick={() => onChange({ accent: p.id })}
+                  className={[
+                    "w-8 h-8 !rounded-full transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+                    ativa
+                      ? "ring-2 ring-offset-2 ring-offset-bg-surface ring-text-primary scale-110"
+                      : "hover:scale-110",
+                  ].join(" ")}
+                  /* A amostra mostra as DUAS cores da paleta: o degradê é o que
+                     o fundo animado vai desenhar, não só a cor do ícone. */
+                  style={{ background: `linear-gradient(135deg, ${p.base}, ${p.deep})` }}
+                />
+              );
+            })}
+          </div>
+        </Field>
 
         <Divider />
 
@@ -594,6 +628,12 @@ function SobreSection() {
       </Card>
 
       <UpdateCard />
+
+      {/* Depois do card de atualização de propósito: quem chega aqui pelo sino
+          veio atrás do botão de atualizar, não do histórico. */}
+      <Card title="Novidades">
+        <NovidadesLista />
+      </Card>
     </>
   );
 }

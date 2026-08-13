@@ -95,17 +95,21 @@ novo** — a pública fica gravada no binário deles e não há como trocar remo
 
 ### Passo a passo de uma release nova
 
-1. **Subir a versão nos três arquivos** (têm que ficar iguais): `package.json`,
-   `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`. Quem manda no updater é o do
-   `tauri.conf.json`; os outros dois são higiene.
-2. **Verificar**: `npm run typecheck`, `npm run test`, `cargo check --manifest-path src-tauri/Cargo.toml`,
+1. **Subir a versão**: editar o arquivo `VERSION` na raiz (fonte única) e rodar
+   `npm run version:sync`, que propaga para `package.json`, `src-tauri/tauri.conf.json` e
+   `src-tauri/Cargo.toml`. Quem manda no updater é o do `tauri.conf.json`. `npm run version:check`
+   confere sem escrever (o `npm run build` já sincroniza sozinho).
+2. **Escrever as novidades** em `src/lib/changelog.ts`, entrada nova no topo, **em linguagem de
+   usuário** — é o que o app mostra em Configurações → Sobre e no aviso do Início. Versão sem
+   entrada não mostra aviso nenhum; um teste reprova jargão técnico no texto.
+3. **Verificar**: `npm run typecheck`, `npm run test`, `cargo check --manifest-path src-tauri/Cargo.toml`,
    `pytest python/test_converter.py`.
-3. **Exportar as variáveis de assinatura** (acima) e rodar `npm run build`.
+4. **Exportar as variáveis de assinatura** (acima) e rodar `npm run build`.
    Os artefatos vão parar em `installers/`.
-4. `npm run release` — gera `installers/latest.json` e imprime a tag esperada (`v<versão>`).
-5. **Criar o Release no GitHub** com essa tag, anexando três arquivos de `installers/`:
+5. `npm run release` — gera `installers/latest.json` e imprime a tag esperada (`v<versão>`).
+6. **Criar o Release no GitHub** com essa tag, anexando três arquivos de `installers/`:
    o instalador (`*-setup.exe`), o `.sig` dele e o `latest.json`.
-6. Registrar no `roadmaps/new-functions/roadmap.md`.
+7. Registrar no `roadmaps/new-functions/roadmap.md`.
 
 ### Armadilhas conhecidas
 
