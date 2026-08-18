@@ -9,6 +9,7 @@ const whisperInstalled = vi.fn();
 const depthInstalled = vi.fn();
 const realesrganInstalled = vi.fn();
 const rembgInstalled = vi.fn();
+const webcaptureInstalled = vi.fn();
 
 // Módulo novo aqui exige entrada nova neste mock — o ModuleGate importa todos
 // os `checar` de uma vez, e um export faltando derruba a suíte inteira no load.
@@ -25,6 +26,8 @@ vi.mock("../services/conversionService", () => ({
   ensureRealesrgan: vi.fn(),
   rembgInstalled: () => rembgInstalled(),
   ensureRembg: vi.fn(),
+  webcaptureInstalled: () => webcaptureInstalled(),
+  ensureWebcapture: vi.fn(),
 }));
 
 // O plugin do updater não existe fora do Tauri; sem isto o import dinâmico
@@ -39,6 +42,7 @@ beforeEach(() => {
   depthInstalled.mockResolvedValue(true);
   realesrganInstalled.mockResolvedValue(true);
   rembgInstalled.mockResolvedValue(true);
+  webcaptureInstalled.mockResolvedValue(true);
   check.mockResolvedValue(null);
 });
 

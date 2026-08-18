@@ -23,6 +23,10 @@ fn emit_progress_lines(app: &AppHandle, tool: &str, text: &str) {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(rest.trim()) {
                 let _ = app.emit("youtube-event", val);
             }
+        } else if let Some(rest) = trimmed.strip_prefix("PAGEEVENT:") {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(rest.trim()) {
+                let _ = app.emit("capture-page-event", val);
+            }
         }
     }
     eprint!("[converter/{tool}] {text}");
@@ -48,6 +52,7 @@ async fn run_python_tool(app: &AppHandle, tool: &str, input_json: &str) -> Resul
             // 45 MB baixados nem recarregar modelo nenhum.
             "depth_map" => run_module_sidecar(app, depth_exe_path(app), "DEPTH_MISSING", tool, input_json).await,
             "remove_bg" => run_module_sidecar(app, rembg_exe_path(app), "REMBG_MISSING", tool, input_json).await,
+            "capture_site" => run_module_sidecar(app, webcapture_exe_path(app), "WEBCAPTURE_MISSING", tool, input_json).await,
             _ => run_sidecar_python(app, tool, input_json).await,
         }
     }
@@ -327,6 +332,18 @@ const REMBG: RemoteModule = RemoteModule {
     label: "Remover fundo (u2net)",
 };
 
+/// Captura de site (Playwright dirigindo o Edge do Windows via `channel="msedge"`,
+/// sem baixar Chromium). ~46 MB medidos, na faixa do realesrgan/depth.
+const WEBCAPTURE: RemoteModule = RemoteModule {
+    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/webcapture-v1/camps-webcapture.zip",
+    // Vazio até o zip de verdade ser gerado e publicado — ver `python build.py webcapture`.
+    sha256: "",
+    zip_name: "camps-webcapture.zip",
+    event: "webcapture-progress",
+    marker: "converter-webcapture-x86_64-pc-windows-msvc.exe",
+    label: "Capturar site (Playwright)",
+};
+
 fn docling_exe_name() -> String {
     format!("converter-docling-{TARGET_TRIPLE}.exe")
 }
@@ -366,6 +383,44 @@ pub async fn ensure_rembg(app: AppHandle) -> Result<(), String> {
     #[cfg(not(debug_assertions))]
     {
         ensure_module(&app, &REMBG).await
+    }
+}
+
+fn webcapture_exe_name() -> String {
+    format!("converter-webcapture-{TARGET_TRIPLE}.exe")
+}
+
+#[cfg(not(debug_assertions))]
+fn webcapture_exe_path(app: &AppHandle) -> Option<PathBuf> {
+    runtime_dir(app).map(|d| d.join(webcapture_exe_name()))
+}
+
+/// Informa se o módulo de captura de site está pronto. Em dev, sempre true —
+/// o Rust roda `converter.py` pela .venv, que precisa ter playwright.
+#[tauri::command]
+pub async fn webcapture_installed(app: AppHandle) -> bool {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        true
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        module_installed(&app, &WEBCAPTURE)
+    }
+}
+
+/// Baixa e extrai o módulo de captura de site. Emite `webcapture-progress` (0–100).
+#[tauri::command]
+pub async fn ensure_webcapture(app: AppHandle) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        return Ok(());
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        ensure_module(&app, &WEBCAPTURE).await
     }
 }
 
@@ -515,6 +570,54 @@ pub async fn ensure_realesrgan(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     ensure_module(&app, &REALESRGAN).await
+}
+
+/// Percorre `dir` recursivamente coletando cada arquivo com seu caminho
+/// relativo a `base` (o que vira o nome da entrada dentro do zip).
+fn walk_files(base: &Path, dir: &Path, out: &mut Vec<(PathBuf, String)>) -> Result<(), String> {
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_dir() {
+            walk_files(base, &path, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(base)
+                .map_err(|e| e.to_string())?
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push((path, rel));
+        }
+    }
+    Ok(())
+}
+
+fn create_zip_blocking(source_dir: &Path, dest_zip: &Path) -> Result<(), String> {
+    let mut files = Vec::new();
+    walk_files(source_dir, source_dir, &mut files)?;
+
+    let file = std::fs::File::create(dest_zip).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options: zip::write::FileOptions<()> =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    for (path, name) in files {
+        zip.start_file(name, options).map_err(|e| e.to_string())?;
+        let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        std::io::copy(&mut f, &mut zip).map_err(|e| e.to_string())?;
+    }
+    zip.finish().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Compacta `source_dir` inteiro em `dest_zip` (usado, p.ex., para exportar uma
+/// captura de site como zip). Roda em `spawn_blocking` — I/O pesado não pode
+/// travar o runtime async.
+#[tauri::command]
+pub async fn create_zip(source_dir: String, dest_zip: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || create_zip_blocking(Path::new(&source_dir), Path::new(&dest_zip)))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {

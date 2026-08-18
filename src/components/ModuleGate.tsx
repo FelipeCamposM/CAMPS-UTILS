@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Eraser, FileScan, Layers, Sparkles } from "lucide-react";
+import { AudioLines, Clapperboard, Eraser, FileScan, Globe, Layers, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -9,10 +9,12 @@ import {
   ensureFfmpeg,
   ensureRealesrgan,
   ensureRembg,
+  ensureWebcapture,
   ensureWhisper,
   ffmpegInstalled,
   realesrganInstalled,
   rembgInstalled,
+  webcaptureInstalled,
   whisperInstalled,
 } from "../services/conversionService";
 import { Button } from "./ui";
@@ -95,6 +97,18 @@ export const MODULES = {
     evento: "depth-progress",
     checar: depthInstalled,
     baixar: ensureDepth,
+  },
+  webcapture: {
+    titulo: "Módulo de captura de site",
+    descricao:
+      "Capturar site baixa o motor de captura de sites (~46 MB), baixado uma única vez. Ele navega o site de verdade (Chromium) para extrair texto, Markdown, links e screenshots.",
+    rotuloBotao: "Baixar módulo (~46 MB)",
+    tamanho: "~46 MB",
+    usadoPor: "Capturar site",
+    icone: Globe,
+    evento: "webcapture-progress",
+    checar: webcaptureInstalled,
+    baixar: ensureWebcapture,
   },
 } as const;
 

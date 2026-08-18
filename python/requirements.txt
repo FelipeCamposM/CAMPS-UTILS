@@ -25,5 +25,10 @@ pymatting>=1.1
 pooch>=1.8
 jsonschema>=4.0
 scikit-image>=0.22
+# Captura de site: dirige o Edge do Windows já instalado (channel="msedge"),
+# sem baixar Chromium — medido a ~46 MB de bundle.
+playwright>=1.40
+beautifulsoup4>=4.12
+markdownify>=0.13
 pyinstaller>=6.0.0
 pytest>=8.0.0

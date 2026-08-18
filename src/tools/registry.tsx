@@ -1,6 +1,6 @@
 import type { ReactNode, ComponentType } from "react";
 import type { ModuleId } from "../components/ModuleGate";
-import { Braces, Captions, CirclePlay, Eraser, FileOutput, FileText, FileType, Film, Hash, Image, Layers, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
+import { Braces, Captions, CirclePlay, Eraser, FileOutput, FileText, FileType, Film, Globe, Hash, Image, Layers, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
 import type { AppSettings } from "../types/settings";
 import type { HistoryEntry } from "../types/conversion";
 import { PdfToMarkdownTool } from "./pdf-to-markdown/PdfToMarkdownTool";
@@ -23,6 +23,7 @@ import { AudioConvertTool } from "./audio-convert/AudioConvertTool";
 import { VideoToGifTool } from "./video-to-gif/VideoToGifTool";
 import { VideoSubtitleTool } from "./video-subtitle/VideoSubtitleTool";
 import { VideoBurnTool } from "./video-burn/VideoBurnTool";
+import { WebCaptureTool } from "./web-capture/WebCaptureTool";
 
 export type ToolCategory = "documentos" | "imagens" | "midia" | "utilitarios";
 
@@ -240,6 +241,16 @@ export const TOOLS: ToolDef[] = [
     category: "utilitarios",
     icon: <Hash className="w-full h-full" />,
     component: HashTool,
+  },
+  {
+    id: "web-capture",
+    name: "Capturar site",
+    description: "Navega um site de verdade e extrai texto, Markdown, HTML, links e screenshots.",
+    category: "utilitarios",
+    icon: <Globe className="w-full h-full" />,
+    component: WebCaptureTool,
+    module: "webcapture",
+    wide: true,
   },
 ];
 

@@ -848,3 +848,120 @@ class TestDepthDispatch:
             },
         )
         assert r["success"] is True, r
+
+
+class TestCaptureSiteEntrada:
+    """Validação de URL é barata e roda ANTES de importar o Playwright — não
+    pode disparar o import só porque o usuário digitou algo errado."""
+
+    def test_url_vazia(self):
+        from converter import capture_site
+
+        assert capture_site({"url": ""})["errorCode"] == "INVALID_INPUT"
+
+    def test_url_sem_url(self):
+        from converter import capture_site
+
+        assert capture_site({})["errorCode"] == "INVALID_INPUT"
+
+    def test_scheme_nao_suportado(self):
+        from converter import capture_site
+
+        r = capture_site({"url": "ftp://exemplo.com/arquivo"})
+        assert r["errorCode"] == "INVALID_INPUT"
+
+    def test_sem_host(self):
+        from converter import capture_site
+
+        assert capture_site({"url": "http://"})["errorCode"] == "INVALID_INPUT"
+
+    def test_nao_importa_webcapture_no_caminho_barato(self):
+        """`webcapture` puxa o Playwright; a validação de URL tem de barrar
+        antes disso, então o módulo não pode aparecer em `sys.modules`."""
+        from converter import capture_site
+
+        sys.modules.pop("webcapture", None)
+        capture_site({"url": "não é uma url"})
+        assert "webcapture" not in sys.modules
+
+    def test_dispatch_encaminha_capture_site(self):
+        r = dispatch("capture_site", {"url": "não é uma url"})
+        assert r["errorCode"] == "INVALID_INPUT"
+
+
+class TestCaptureSiteSaida:
+    """Contrato do resultado, com o crawl trocado por um dublê.
+
+    `capturar_site` é `async def`; o dublê precisa ser awaitable também.
+    """
+
+    def test_monta_json_de_sucesso(self, monkeypatch, tmp_path):
+        import webcapture
+        from converter import capture_site
+
+        resultado_fake = {
+            "encontradas": 3,
+            "processadas": 3,
+            "falharam": 1,
+            "arquivos": {"markdown": 2, "html": 3, "screenshots": 2},
+            "paginas": [
+                {"url": "http://exemplo.com/", "status": "ok", "mdPath": "a.md", "htmlPath": "a.html", "screenshotPath": "a.png", "error": None},
+                {"url": "http://exemplo.com/sobre", "status": "ok", "mdPath": "b.md", "htmlPath": "b.html", "screenshotPath": "b.png", "error": None},
+                {"url": "http://exemplo.com/quebrada", "status": "erro", "mdPath": None, "htmlPath": None, "screenshotPath": None, "error": "timeout"},
+            ],
+        }
+
+        async def fake_capturar_site(**kwargs):
+            assert kwargs["url"] == "http://exemplo.com"
+            assert kwargs["escopo"] == "dominio"
+            assert kwargs["concorrencia"] == 5
+            return resultado_fake
+
+        monkeypatch.setattr(webcapture, "capturar_site", fake_capturar_site)
+
+        r = capture_site({"url": "http://exemplo.com", "escopo": "dominio"})
+        assert r["success"] is True, r
+        assert r["outputDir"]
+        assert isinstance(r["durationMs"], int)
+        assert r["encontradas"] == 3
+        assert r["processadas"] == 3
+        assert r["falharam"] == 1
+        assert r["arquivos"] == {"markdown": 2, "html": 3, "screenshots": 2}
+        assert len(r["paginas"]) == 3
+
+    def test_opcoes_default_todas_ligadas(self, monkeypatch):
+        import webcapture
+        from converter import capture_site
+
+        capturadas = {}
+
+        async def fake_capturar_site(**kwargs):
+            capturadas.update(kwargs)
+            return {"encontradas": 0, "processadas": 0, "falharam": 0, "arquivos": {}, "paginas": []}
+
+        monkeypatch.setattr(webcapture, "capturar_site", fake_capturar_site)
+
+        capture_site({"url": "http://exemplo.com"})
+        assert capturadas["opcoes"] == {
+            "texto": True,
+            "markdown": True,
+            "html": True,
+            "links": True,
+            "screenshot": True,
+            "metadados": True,
+            "explorarTabsAccordions": True,
+            "scrollAutomatico": True,
+        }
+        assert capturadas["escopo"] == "pagina"
+
+    def test_excecao_no_crawl_vira_conversion_failed(self, monkeypatch):
+        import webcapture
+        from converter import capture_site
+
+        async def fake_capturar_site(**kwargs):
+            raise RuntimeError("Edge não encontrado")
+
+        monkeypatch.setattr(webcapture, "capturar_site", fake_capturar_site)
+
+        r = capture_site({"url": "http://exemplo.com"})
+        assert r["errorCode"] == "CONVERSION_FAILED"

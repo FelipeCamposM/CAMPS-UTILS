@@ -9,6 +9,10 @@ Alvos:
              baixado sob demanda no 1º uso da legenda automática. ~90 MB.
   depth   -> converter-depth-<triple>.exe (Depth Anything V2 via ONNX Runtime) —
              zipado p/ o Release, baixado sob demanda no 1º mapa de profundidade.
+  rembg   -> converter-rembg-<triple>.exe (rembg/u2net via ONNX Runtime) —
+             zipado p/ o Release, baixado sob demanda na 1ª remoção de fundo.
+  webcapture -> converter-webcapture-<triple>.exe (Playwright dirigindo o Edge
+             do Windows) — zipado p/ o Release, baixado sob demanda na 1ª captura.
   ffmpeg  -> camps-ffmpeg.zip (ffmpeg.exe + ffprobe.exe) — não compila nada, só
              empacota os binários que já estão em src-tauri/binaries/. Saíram do
              instalador porque somam 168 MB crus.
@@ -19,6 +23,8 @@ Uso:
   python build.py docling
   python build.py whisper
   python build.py depth
+  python build.py rembg
+  python build.py webcapture
   python build.py ffmpeg
 """
 
@@ -50,6 +56,16 @@ LIGHT_COLLECTS = [
 ]
 
 
+# A pilha da captura de site, vista de fora. `converter.py::capture_site` faz
+# `from webcapture import capturar_site` DENTRO da função — mesmo mecanismo do
+# rembg/depth abaixo — então sem excluir esta lista todo bundle que não é o do
+# webcapture arrastaria playwright + bs4 + markdownify (~46 MB) por uma
+# ferramenta que ele nunca executa.
+WEBCAPTURE_STACK = [
+    "webcapture", "playwright", "greenlet", "pyee",
+    "bs4", "beautifulsoup4", "soupsieve", "markdownify",
+]
+
 # A pilha da remoção de fundo, vista de fora. `converter.py::remove_bg` faz
 # `import bgremove` DENTRO da função, e o PyInstaller segue isso: sem excluir,
 # todo bundle que não é o do rembg engordaria ~100 MB (numba, llvmlite,
@@ -63,7 +79,7 @@ REMBG_STACK = [
 # `import depth`, e depth.py importa numpy + onnxruntime no topo — sem excluir o
 # próprio módulo `depth`, o instalador engordaria ~70 MB com a inferência que
 # nunca roda ali (o Rust manda `depth_map` para o sidecar `depth`).
-LIGHT_EXCLUDES = ["depth"] + REMBG_STACK
+LIGHT_EXCLUDES = ["depth"] + REMBG_STACK + WEBCAPTURE_STACK
 
 
 # Arrastados transitivamente pelo yt-dlp e inúteis na transcrição.
@@ -81,7 +97,7 @@ DEPTH_EXCLUDES = [
     "faster_whisper", "ctranslate2", "av", "tokenizers",
     "pandas", "huggingface_hub", "hf_xet", "lxml",
     "pydantic", "pydantic_core", "safetensors",
-] + REMBG_STACK
+] + REMBG_STACK + WEBCAPTURE_STACK
 
 # O que o bundle do rembg PRECISA e portanto não pode ser excluído pelas listas
 # dos outros módulos. `requests`/`urllib3` estão aqui porque o pooch baixa os
@@ -191,7 +207,7 @@ def build_whisper(triple: str) -> None:
     # onnxruntime`. A exclusão vence, e o exe morria em tempo de execução com
     # "Applying the VAD filter requires the onnxruntime package" — só no
     # empacotado, porque em dev a .venv tem tudo.
-    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + REMBG_STACK
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + REMBG_STACK + WEBCAPTURE_STACK
                if m not in coletar]
 
     extra: list[str] = []
@@ -308,6 +324,52 @@ def build_rembg(triple: str) -> None:
           "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> REMBG.sha256")
 
 
+def build_webcapture(triple: str) -> None:
+    """Sidecar de captura de site (Playwright dirigindo o Edge do Windows via
+    `channel="msedge"`, sem baixar Chromium). ~46 MB medidos.
+
+    Só o runtime do Playwright entra no zip — ele dirige o Edge já instalado no
+    Windows, então não há binário de navegador para empacotar aqui.
+    """
+    name = f"converter-webcapture-{triple}"
+    print(f"\n=== Bundle WEBCAPTURE: {name} ===")
+
+    coletar = ["playwright", "bs4", "markdownify"]
+
+    # Mesma subtração dos outros módulos: sem excluir as pilhas alheias, este
+    # bundle arrastaria docling, whisper, depth e rembg por trás dos imports
+    # dentro de função que `converter.py` faz para cada ferramenta.
+    #
+    # `DEPTH_EXCLUDES` já inclui `WEBCAPTURE_STACK` (subtração cruzada, ver seu
+    # comentário) — sem filtrar por `WEBCAPTURE_STACK` aqui também, o próprio
+    # bundle se auto-excluiria: `greenlet`/`pyee`/`soupsieve`/`beautifulsoup4`
+    # não estão em `coletar` (só os três pacotes top-level estão) mas são
+    # dependência direta de playwright/bs4.
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + DEPTH_EXCLUDES + REMBG_STACK
+               if m not in coletar and m not in WEBCAPTURE_STACK]
+
+    extra: list[str] = []
+    for lib in coletar:
+        extra += ["--collect-all", lib]
+    for mod in excluir:
+        extra += ["--exclude-module", mod]
+
+    exe = _run_pyinstaller(name, extra)
+
+    zip_path = DIST_DIR / "camps-webcapture.zip"
+    print(f"\nZipando {exe.name} -> {zip_path.name} …")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(exe, arcname=exe.name)
+
+    sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (DIST_DIR / "camps-webcapture.sha256").write_text(sha, encoding="utf-8")
+
+    print(f"\nZip:    {zip_path}  ({zip_path.stat().st_size // (1024*1024)} MB)")
+    print(f"SHA256: {sha}")
+    print("\n>> Suba 'camps-webcapture.zip' num Release com a tag 'webcapture-v1' (marcado como "
+          "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> WEBCAPTURE.sha256")
+
+
 def build_ffmpeg() -> None:
     """Zipa ffmpeg.exe + ffprobe.exe p/ o Release. Não compila nada."""
     print("\n=== Bundle FFMPEG ===")
@@ -405,8 +467,8 @@ def clean() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build dos sidecars CAMPS-UTILS")
     parser.add_argument("target", nargs="?", default="both",
-                        choices=["light", "docling", "whisper", "depth", "rembg", "ffmpeg",
-                                 "realesrgan", "both"])
+                        choices=["light", "docling", "whisper", "depth", "rembg", "webcapture",
+                                 "ffmpeg", "realesrgan", "both"])
     args = parser.parse_args()
 
     # ffmpeg e realesrgan só empacotam binários prontos: não rodam PyInstaller
@@ -431,5 +493,7 @@ if __name__ == "__main__":
         build_depth(triple)
     if args.target == "rembg":
         build_rembg(triple)
+    if args.target == "webcapture":
+        build_webcapture(triple)
 
     print("\nBuild concluído.")

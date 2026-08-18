@@ -704,3 +704,59 @@ export async function saveMarkdown(
 export async function openFolder(filePath: string): Promise<void> {
   await invoke("open_folder", { filePath });
 }
+
+export type CaptureScope = "pagina" | "pagina_subpaginas" | "dominio";
+
+export interface CaptureOptions {
+  texto: boolean;
+  markdown: boolean;
+  html: boolean;
+  links: boolean;
+  screenshot: boolean;
+  metadados: boolean;
+  explorarTabsAccordions: boolean;
+  scrollAutomatico: boolean;
+}
+
+export interface CaptureArgs {
+  url: string;
+  escopo: CaptureScope;
+  opcoes: CaptureOptions;
+  maxPaginas?: number | null;   // null/undefined = sem limite
+  concorrencia: number;          // default 5
+}
+
+export interface CapturePageResult {
+  url: string;
+  status: "ok" | "erro";
+  mdPath?: string;
+  htmlPath?: string;
+  screenshotPath?: string;
+  error?: string;
+}
+
+export interface CaptureResult {
+  outputDir: string;
+  encontradas: number;
+  processadas: number;
+  falharam: number;
+  arquivos: { markdown: number; html: number; screenshots: number };
+  paginas: CapturePageResult[];
+  durationMs: number;
+}
+
+export async function captureSite(args: CaptureArgs) {
+  return runTool<CaptureResult>("capture_site", {
+    url: args.url,
+    escopo: args.escopo,
+    opcoes: args.opcoes,
+    max_paginas: args.maxPaginas ?? null,
+    concorrencia: args.concorrencia,
+  });
+}
+
+export async function webcaptureInstalled() { return invoke<boolean>("webcapture_installed"); }
+export async function ensureWebcapture() { await invoke("ensure_webcapture"); }
+export async function createZip(sourceDir: string, destZip: string) {
+  await invoke("create_zip", { sourceDir, destZip });
+}

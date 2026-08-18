@@ -9,6 +9,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Redirect all non-JSON output to stderr so stdout stays clean
 def log(msg: str) -> None:
@@ -912,6 +913,78 @@ def remove_bg(input_path: str | None) -> dict:
     }
 
 
+def _dir_trabalho_webcapture() -> Path:
+    """Onde a captura de site escreve suas pastas, uma por execução.
+
+    Mesmo padrão do rembg/depth: temp próprio, sem `outDir` de entrada.
+    """
+    d = Path(tempfile.gettempdir()) / "camps-utils" / "webcapture" / str(int(time.time() * 1000))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def capture_site(data: dict) -> dict:
+    """Crawl de um site com Playwright/Edge → Markdown, HTML, texto, screenshots.
+
+    Validação de URL é barata e roda ANTES do import do Playwright: o objetivo
+    é nunca pagar o custo do módulo pesado por um erro de digitação.
+    """
+    start = time.time()
+
+    url = (data.get("url") or "").strip()
+    partes = urlparse(url)
+    if partes.scheme not in ("http", "https") or not partes.netloc:
+        return make_error("INVALID_INPUT", "URL inválida. Use um endereço http:// ou https://.")
+
+    escopo = data.get("escopo") or "pagina"
+    opcoes_padrao = {
+        "texto": True,
+        "markdown": True,
+        "html": True,
+        "links": True,
+        "screenshot": True,
+        "metadados": True,
+        "explorarTabsAccordions": True,
+        "scrollAutomatico": True,
+    }
+    opcoes = {**opcoes_padrao, **(data.get("opcoes") or {})}
+    max_paginas = data.get("maxPaginas")
+    concorrencia = data.get("concorrencia") or 5
+
+    try:
+        import asyncio
+
+        from webcapture import capturar_site
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Playwright não encontrado. Verifique a instalação.")
+
+    out_dir = _dir_trabalho_webcapture()
+    try:
+        resultado = asyncio.run(
+            capturar_site(
+                url=url,
+                escopo=escopo,
+                opcoes=opcoes,
+                max_paginas=max_paginas,
+                concorrencia=concorrencia,
+                out_dir=str(out_dir),
+                passo=lambda t: log(f"STEP: {t}"),
+                pagina_evento=lambda evt: log(f"PAGEEVENT:{json.dumps(evt, ensure_ascii=False)}"),
+            )
+        )
+    except Exception as e:
+        log(f"WEBCAPTURE_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível capturar o site.")
+
+    return {
+        **resultado,
+        "success": True,
+        "outputDir": str(out_dir),
+        "durationMs": int((time.time() - start) * 1000),
+    }
+
+
 def _modelo_em_cache(model_size: str) -> bool:
     """Diz se o modelo do Whisper já está no cache da HuggingFace.
 
@@ -1558,6 +1631,9 @@ def dispatch(tool: str, data: dict) -> dict:
 
     if tool == "remove_bg":
         return remove_bg(data.get("inputPath", "").strip() or None)
+
+    if tool == "capture_site":
+        return capture_site(data)
 
     if tool == "depth_adjust":
         return depth_adjust(
