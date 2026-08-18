@@ -40,13 +40,21 @@ inclui crawl completo de domínio (não fica pra v2). Peso medido do módulo: ~4
   `webcaptureInstalled`/`ensureWebcapture`/`createZip`. `ModuleGate.tsx`: entrada
   `webcapture`. `registry.tsx`: tool `web-capture` (categoria utilitarios, wide).
   `npm run typecheck` + `npm run test`: limpos (104 testes).
-- [ ] **5. Empacotar e publicar** — rodar `python build.py webcapture`, **rodar o
-  `.exe` compilado de verdade** (não só dev venv) contra um site real, preencher
-  `sha256` real em `commands.rs` (`WEBCAPTURE`), publicar Release `webcapture-v1`
-  como **pre-release** no GitHub com `camps-webcapture.zip` + `.sha256`.
-- [ ] **6. Smoke test manual em `npm run dev`** — testar os 3 escopos (só esta
-  página / esta página + subpáginas / domínio inteiro) contra um site pequeno real,
-  confirmar screenshot/MD/HTML/ZIP/abrir pasta funcionando ponta a ponta.
+- [x] **5. Empacotar e publicar** — `python build.py webcapture` gerou
+  `camps-webcapture.zip` (56MB) + sha256
+  `a7990e665875256f997784a71751e940e9dd82d6f1fefb11a8557a1a1cda78f8`. `.exe`
+  compilado testado de verdade contra `https://example.com` (captura completa,
+  channel=msedge sem baixar Chromium). Publicado
+  [webcapture-v1](https://github.com/FelipeCamposM/CAMPS-UTILS/releases/tag/webcapture-v1)
+  como pre-release. sha256 gravado em `commands.rs` → `WEBCAPTURE`.
+- [x] **6. Smoke test manual** — usuário testou manualmente em `npm run dev` e
+  confirmou funcionando.
+- [x] **7. Release da versão 1.2.0** — `VERSION`/`version:sync`, entrada em
+  `src/lib/changelog.ts`, verificações completas (typecheck/vitest/pytest/cargo
+  debug+release, todas passando), `npm run build` assinado, `npm run release` →
+  `latest.json`, publicado
+  [v1.2.0](https://github.com/FelipeCamposM/CAMPS-UTILS/releases/tag/v1.2.0)
+  (marcado "Latest" corretamente, na frente do `webcapture-v1` que é pre-release).
 
 ## Riscos conhecidos
 

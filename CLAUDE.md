@@ -12,7 +12,7 @@ anote o que foi feito (com caminhos de arquivo) e os próximos passos, antes de 
 |---|---|
 | `roadmaps/new-functions/roadmap.md` | Fases 1–3: suíte, ferramentas, visual, módulos, updater. **Estado atual.** |
 | `roadmaps/removebg-vtracer-realesrgan/roadmap.md` | Entregue: vetorizar (VTracer), aumentar qualidade (Real-ESRGAN), remover fundo (rembg). |
-| `roadmaps/web-capture/roadmap.md` | Nova ferramenta: capturar site inteiro (Playwright) em Markdown/HTML/screenshot. Falta empacotar/publicar o módulo. |
+| `roadmaps/web-capture/roadmap.md` | Nova ferramenta: capturar site inteiro (Playwright) em Markdown/HTML/screenshot. Entregue na 1.2.0. |
 | `roadmaps/ia-local/roadmap.md` | Fase 4 (**em espera**): legendas, voz, imagem com IA local. Prompt de arranque em `roadmaps/ia-local/PROMPT.md`. |
 
 A spec formal é `spec/novas-funcoes/camps-utils-spec.md`. Comece qualquer sessão lendo o roadmap da
