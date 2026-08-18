@@ -336,8 +336,7 @@ const REMBG: RemoteModule = RemoteModule {
 /// sem baixar Chromium). ~46 MB medidos, na faixa do realesrgan/depth.
 const WEBCAPTURE: RemoteModule = RemoteModule {
     url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/webcapture-v1/camps-webcapture.zip",
-    // Vazio até o zip de verdade ser gerado e publicado — ver `python build.py webcapture`.
-    sha256: "",
+    sha256: "a7990e665875256f997784a71751e940e9dd82d6f1fefb11a8557a1a1cda78f8",
     zip_name: "camps-webcapture.zip",
     event: "webcapture-progress",
     marker: "converter-webcapture-x86_64-pc-windows-msvc.exe",

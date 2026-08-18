@@ -24,6 +24,14 @@ export interface Novidade {
 /** Mais recente primeiro — a ordem da lista é a ordem daqui. */
 export const NOVIDADES: Novidade[] = [
   {
+    versao: "1.2.0",
+    data: "18/08/2026",
+    itens: [
+      "Nova ferramenta Capturar site: varre um site inteiro (ou só a página que você indicar) e salva cada página em Markdown, HTML, texto e uma foto completa da tela, abrindo abas e menus escondidos e rolando a página sozinha pra não deixar nada de fora.",
+      "No final da captura dá pra abrir a pasta com tudo ou baixar um ZIP com o site inteiro de uma vez.",
+    ],
+  },
+  {
     versao: "1.1.0",
     data: "13/08/2026",
     itens: [
