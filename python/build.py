@@ -49,10 +49,11 @@ DOCLING_MODULES = [
     "rapidocr", "onnxruntime", "transformers", "scipy", "cv2",
 ]
 
-# Bibliotecas leves usadas pelas demais ferramentas (md2pdf, pdf-utils, youtube).
+# Bibliotecas leves usadas pelas demais ferramentas (md2pdf, pdf-utils, youtube,
+# HEIC->PNG pro conversor de imagens nativo em Rust).
 LIGHT_COLLECTS = [
     "markdown", "pymdownx", "pygments", "xhtml2pdf", "reportlab", "svglib",
-    "fitz", "pikepdf", "yt_dlp", "mammoth",
+    "fitz", "pikepdf", "yt_dlp", "mammoth", "pillow_heif",
 ]
 
 
@@ -82,10 +83,13 @@ REMBG_STACK = [
 LIGHT_EXCLUDES = ["depth"] + REMBG_STACK + WEBCAPTURE_STACK
 
 
-# Arrastados transitivamente pelo yt-dlp e inúteis na transcrição.
+# Arrastados transitivamente pelo yt-dlp e inúteis na transcrição. `pillow_heif`
+# só serve o `heic_decode` do conversor de imagens (roteado pro sidecar light),
+# nunca chamado por whisper/depth/rembg/webcapture — fora daqui.
 WHISPER_EXCLUDES = [
     "websockets", "requests", "urllib3", "curl_cffi", "Cryptodome",
     "secretstorage", "brotli", "mutagen", "PIL", "reportlab", "html5lib",
+    "pillow_heif",
 ]
 
 # A pilha da transcrição, vista de fora. `WHISPER_EXCLUDES` não serve aqui: ela
@@ -97,6 +101,7 @@ DEPTH_EXCLUDES = [
     "faster_whisper", "ctranslate2", "av", "tokenizers",
     "pandas", "huggingface_hub", "hf_xet", "lxml",
     "pydantic", "pydantic_core", "safetensors",
+    "pillow_heif",
 ] + REMBG_STACK + WEBCAPTURE_STACK
 
 # O que o bundle do rembg PRECISA e portanto não pode ser excluído pelas listas

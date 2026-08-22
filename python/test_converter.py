@@ -929,7 +929,7 @@ class TestCaptureSiteSaida:
         assert r["arquivos"] == {"markdown": 2, "html": 3, "screenshots": 2}
         assert len(r["paginas"]) == 3
 
-    def test_opcoes_default_todas_ligadas(self, monkeypatch):
+    def test_opcoes_default(self, monkeypatch):
         import webcapture
         from converter import capture_site
 
@@ -943,14 +943,16 @@ class TestCaptureSiteSaida:
 
         capture_site({"url": "http://exemplo.com"})
         assert capturadas["opcoes"] == {
-            "texto": True,
+            "texto": False,
             "markdown": True,
-            "html": True,
-            "links": True,
+            "html": False,
+            "links": False,
             "screenshot": True,
-            "metadados": True,
-            "explorarTabsAccordions": True,
-            "scrollAutomatico": True,
+            "metadados": False,
+            "explorarTabsAccordions": False,
+            "scrollAutomatico": False,
+            "assets": False,
+            "somenteImagens": False,
         }
         assert capturadas["escopo"] == "pagina"
 
@@ -965,3 +967,106 @@ class TestCaptureSiteSaida:
 
         r = capture_site({"url": "http://exemplo.com"})
         assert r["errorCode"] == "CONVERSION_FAILED"
+
+
+class TestExtrairUrlsAssets:
+    """Enumeração de assets é lógica pura — sem Playwright envolvido."""
+
+    def test_imagens_src_e_srcset(self):
+        from bs4 import BeautifulSoup
+        from webcapture import extrair_urls_assets
+
+        soup = BeautifulSoup(
+            '<img src="/a.png"><img srcset="/b.png 1x, /c.png 2x">', "html.parser"
+        )
+        urls = extrair_urls_assets(soup, "http://exemplo.com/pagina", {"imagens"})
+        assert urls["imagens"] == [
+            "http://exemplo.com/a.png",
+            "http://exemplo.com/b.png",
+            "http://exemplo.com/c.png",
+        ]
+
+    def test_css_e_js_cross_origin(self):
+        from bs4 import BeautifulSoup
+        from webcapture import extrair_urls_assets
+
+        soup = BeautifulSoup(
+            '<link rel="stylesheet" href="https://cdn.example.com/x.css">'
+            '<script src="https://cdn2.example.com/y.js"></script>',
+            "html.parser",
+        )
+        urls = extrair_urls_assets(soup, "http://exemplo.com", {"css", "js"})
+        assert urls["css"] == ["https://cdn.example.com/x.css"]
+        assert urls["js"] == ["https://cdn2.example.com/y.js"]
+
+    def test_tipo_nao_pedido_fica_de_fora(self):
+        from bs4 import BeautifulSoup
+        from webcapture import extrair_urls_assets
+
+        soup = BeautifulSoup('<img src="/a.png"><script src="/b.js"></script>', "html.parser")
+        urls = extrair_urls_assets(soup, "http://exemplo.com", {"imagens"})
+        assert "js" not in urls
+
+
+class TestNomeAsset:
+    def test_preserva_nome_original(self):
+        from webcapture import _nome_asset
+
+        assert _nome_asset("http://exemplo.com/img/logo.png").endswith("_logo.png")
+
+    def test_nao_colide_entre_origens_com_mesmo_path(self):
+        from webcapture import _nome_asset
+
+        a = _nome_asset("http://site-a.com/logo.png")
+        b = _nome_asset("http://site-b.com/logo.png")
+        assert a != b
+        assert a.endswith("_logo.png") and b.endswith("_logo.png")
+
+    def test_deterministico(self):
+        from webcapture import _nome_asset
+
+        assert _nome_asset("http://exemplo.com/x.png") == _nome_asset("http://exemplo.com/x.png")
+
+    def test_sem_nome_na_url_usa_so_hash(self):
+        from webcapture import _nome_asset
+
+        assert "_" not in _nome_asset("http://exemplo.com/")
+
+
+class TestHeicDecode:
+    """`heic_to_png` roda no sidecar light — o crate `image` do Rust não lê
+    HEIC/HEIF, então o conversor de imagens chama isto antes de abrir o arquivo."""
+
+    def _heic_fixture(self, tmp_path):
+        import pillow_heif
+        from PIL import Image
+
+        img = Image.new("RGB", (16, 16), (10, 20, 30))
+        src = tmp_path / "foto.heic"
+        pillow_heif.from_pillow(img).save(src)
+        return src
+
+    def test_decodifica_para_png_valido(self, tmp_path):
+        from converter import heic_to_png
+        from PIL import Image
+
+        src = self._heic_fixture(tmp_path)
+        r = heic_to_png({"inputPath": str(src)})
+
+        assert r["success"] is True, r
+        saida = Path(r["outputPath"])
+        assert saida.exists()
+        assert saida.suffix == ".png"
+        with Image.open(saida) as img:
+            assert img.size == (16, 16)
+
+    def test_arquivo_inexistente(self):
+        from converter import heic_to_png
+
+        r = heic_to_png({"inputPath": "C:/nao/existe.heic"})
+        assert r["errorCode"] == "INVALID_INPUT"
+
+    def test_dispatch_encaminha_heic_decode(self, tmp_path):
+        src = self._heic_fixture(tmp_path)
+        r = dispatch("heic_decode", {"inputPath": str(src)})
+        assert r["success"] is True, r

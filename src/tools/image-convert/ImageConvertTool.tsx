@@ -19,7 +19,7 @@ const FORMATS: { value: Format; label: string }[] = [
   { value: "ico", label: "ICO" },
 ];
 
-const IMAGE_EXTS = ["jpg", "jpeg", "png", "bmp", "gif", "webp", "tiff", "ico"];
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "bmp", "gif", "webp", "tiff", "ico", "heic", "heif"];
 
 export function ImageConvertTool({ settings, addHistory }: ToolProps) {
   const [files, setFiles] = useState<SelectedFile[]>([]);

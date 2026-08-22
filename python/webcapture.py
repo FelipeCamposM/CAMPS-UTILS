@@ -12,6 +12,7 @@ medido em ~46 MB de bundle contra centenas de MB do `playwright install`.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -24,19 +25,23 @@ from markdownify import markdownify
 from playwright.async_api import async_playwright
 
 OPCOES_PADRAO = {
-    "texto": True,
+    "texto": False,
     "markdown": True,
-    "html": True,
-    "links": True,
+    "html": False,
+    "links": False,
     "screenshot": True,
-    "metadados": True,
-    "explorarTabsAccordions": True,
-    "scrollAutomatico": True,
+    "metadados": False,
+    "explorarTabsAccordions": False,
+    "scrollAutomatico": False,
+    "assets": False,
+    "somenteImagens": False,
 }
 
 MAX_SCROLL_ITERACOES = 20
 MAX_CLIQUES_EXPLORACAO = 30
 TIMEOUT_NAVEGACAO_MS = 30000
+_CSS_URL_RE = re.compile(r'url\(\s*[\'"]?([^\'")]+)[\'"]?\s*\)')
+_TIPOS_ASSETS_TODOS = {"imagens", "css", "js", "fontes"}
 
 
 # ─── Funções puras auxiliares ───────────────────────────────────────────────
@@ -94,6 +99,123 @@ def _canonical(soup: BeautifulSoup) -> str | None:
     return tag.get("href") if tag else None
 
 
+def _urls_de_css(css_texto: str, base_url: str) -> list[str]:
+    """`url(...)` dentro de CSS — cobre background-image e @font-face src.
+
+    Regex, não parser CSS completo: cobre o caso comum (harvesting de asset,
+    não validação de CSS).
+    """
+    return [urljoin(base_url, m) for m in _CSS_URL_RE.findall(css_texto) if not m.startswith("data:")]
+
+
+def extrair_urls_assets(soup: BeautifulSoup, base_url: str, tipos: set[str]) -> dict[str, list[str]]:
+    """Enumera URLs de assets referenciados pela página, agrupadas por tipo.
+
+    `tipos` ⊆ {"imagens", "css", "js", "fontes"} — filtra o que é escaneado,
+    pra não pagar o custo de vasculhar CSS/JS quando só imagem interessa
+    (caminho usado pela ferramenta Capturar Imagens). Sem filtro de domínio:
+    assets de terceiros (CDN, fontes externas) entram também.
+    """
+    out: dict[str, list[str]] = {t: [] for t in tipos}
+
+    if "imagens" in tipos:
+        for img in soup.find_all("img"):
+            if img.get("src"):
+                out["imagens"].append(urljoin(base_url, img["src"]))
+            if img.get("srcset"):
+                for parte in img["srcset"].split(","):
+                    url = parte.strip().split(" ")[0]
+                    if url:
+                        out["imagens"].append(urljoin(base_url, url))
+        for tag in soup.find_all(attrs={"style": True}):
+            out["imagens"].extend(_urls_de_css(tag["style"], base_url))
+        for link in soup.find_all("link", attrs={"rel": re.compile(r"icon", re.I)}):
+            if link.get("href"):
+                out["imagens"].append(urljoin(base_url, link["href"]))
+
+    if "css" in tipos:
+        for link in soup.find_all("link", attrs={"rel": "stylesheet"}):
+            if link.get("href"):
+                out["css"].append(urljoin(base_url, link["href"]))
+
+    if "js" in tipos:
+        for script in soup.find_all("script", src=True):
+            out["js"].append(urljoin(base_url, script["src"]))
+
+    for t in list(out):
+        out[t] = [u for u in out[t] if u.startswith(("http://", "https://"))]
+
+    return out
+
+
+def _nome_asset(url: str) -> str:
+    """Nome de arquivo a partir do nome original na URL, prefixado com um hash
+    curto pra nunca colidir entre origens diferentes que compartilham path
+    (ex: dois sites com /logo.png) sem precisar sanitizar a URL inteira."""
+    base = Path(urlparse(url).path).name
+    base = re.sub(r"[^\w\-.]", "_", base)[:100] if base else ""
+    h = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10]
+    return f"{h}_{base}" if base else h
+
+
+async def _baixar_assets(
+    context,
+    urls: list[str],
+    assets_dir: Path,
+    cache: dict[str, str],
+    lock: asyncio.Lock,
+) -> list[str]:
+    """Baixa cada URL uma única vez (dedupe compartilhado entre páginas e
+    workers concorrentes) e devolve os caminhos relativos usados por esta
+    página, já baixados ou não por outra.
+
+    # ponytail: reserva com sentinel + lock único do crawl, não lock por URL
+    # — ok até concorrencia~10. Se duas páginas pedem a mesma URL nova ao
+    # mesmo tempo, a segunda não espera a primeira baixar (só marca "não
+    # duplicar") e por isso pode não listar esse asset em assetsPaths, mesmo
+    # o arquivo existindo no fim do crawl. Revisitar com lock por URL se
+    # isso incomodar no uso real."""
+    caminhos: list[str] = []
+    for url in urls:
+        chave = normalizar_url(url)
+        async with lock:
+            if chave in cache:
+                if cache[chave] is not None:
+                    caminhos.append(cache[chave])
+                continue
+            cache[chave] = None  # reserva a chave; solta o lock antes do download de rede
+
+        rel = None
+        try:
+            resp = await context.request.get(url, timeout=TIMEOUT_NAVEGACAO_MS)
+            if resp.ok:
+                corpo = await resp.body()
+                nome = _nome_asset(url)
+                (assets_dir / nome).write_bytes(corpo)
+                rel = f"assets/{nome}"
+        except Exception:
+            rel = None
+
+        async with lock:
+            cache[chave] = rel
+        if rel:
+            caminhos.append(rel)
+
+    return caminhos
+
+
+def _ler_css_local(assets_dir: Path, cache: dict[str, str], css_url: str) -> str | None:
+    """Lê de volta um CSS já baixado por `_baixar_assets`, pra escanear
+    `@font-face` sem precisar buscar a URL de novo pela rede."""
+    rel = cache.get(normalizar_url(css_url))
+    if not rel:
+        return None
+    try:
+        return (assets_dir / Path(rel).name).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+
+
 # ─── Playwright: uma página ─────────────────────────────────────────────────
 
 
@@ -131,6 +253,9 @@ async def _capturar_pagina(
     out_dir: Path,
     host: str,
     usados_slugs: set[str],
+    assets_dir: Path,
+    assets_cache: dict[str, str],
+    assets_lock: asyncio.Lock,
 ) -> dict:
     resultado: dict = {
         "url": url,
@@ -141,6 +266,7 @@ async def _capturar_pagina(
         "screenshotPath": None,
         "metadataPath": None,
         "linksPath": None,
+        "assetsPaths": [],
         "error": None,
         "linksInternos": [],
     }
@@ -179,6 +305,34 @@ async def _capturar_pagina(
             if mesmo_dominio(href, host):
                 links_internos.append(href)
         resultado["linksInternos"] = links_internos
+
+        if opcoes.get("assets"):
+            tipos = {"imagens"} if opcoes.get("somenteImagens") else set(_TIPOS_ASSETS_TODOS)
+            urls_por_tipo = extrair_urls_assets(soup, url, tipos)
+            css_urls = urls_por_tipo.get("css", [])
+            urls_alvo = urls_por_tipo.get("imagens", []) + urls_por_tipo.get("js", []) + css_urls
+
+            caminhos_assets = await _baixar_assets(context, urls_alvo, assets_dir, assets_cache, assets_lock)
+
+            if "fontes" in tipos and css_urls:
+                urls_fontes: list[str] = []
+                for css_url in css_urls:
+                    texto_css = _ler_css_local(assets_dir, assets_cache, css_url)
+                    if texto_css:
+                        urls_fontes.extend(_urls_de_css(texto_css, css_url))
+                if urls_fontes:
+                    caminhos_assets += await _baixar_assets(
+                        context, urls_fontes, assets_dir, assets_cache, assets_lock
+                    )
+
+            resultado["assetsPaths"] = caminhos_assets
+
+        usa_pasta_por_pagina = any(
+            opcoes.get(k) for k in ("screenshot", "html", "metadados", "links", "markdown", "texto")
+        )
+        if not usa_pasta_por_pagina:
+            resultado["status"] = "ok"
+            return resultado
 
         slug = slug_unico(slug_de_url(url), usados_slugs)
         pasta = out_dir / slug
@@ -257,6 +411,12 @@ async def capturar_site(
     out_path.mkdir(parents=True, exist_ok=True)
     host = urlparse(url).netloc
 
+    assets_dir = out_path / "assets"
+    if opcoes.get("assets"):
+        assets_dir.mkdir(parents=True, exist_ok=True)
+    assets_cache: dict[str, str] = {}
+    assets_lock = asyncio.Lock()
+
     fila: asyncio.Queue = asyncio.Queue()
     visitadas: set[str] = {normalizar_url(url)}
     await fila.put((url, 0))
@@ -277,7 +437,10 @@ async def capturar_site(
                 try:
                     if passo:
                         passo(f"Capturando {item_url}")
-                    r = await _capturar_pagina(context, item_url, opcoes, out_path, host, usados_slugs)
+                    r = await _capturar_pagina(
+                        context, item_url, opcoes, out_path, host, usados_slugs,
+                        assets_dir, assets_cache, assets_lock,
+                    )
 
                     async with lock:
                         contador += 1
@@ -295,6 +458,7 @@ async def capturar_site(
                                 "mdPath": r["mdPath"],
                                 "htmlPath": r["htmlPath"],
                                 "screenshotPath": r["screenshotPath"],
+                                "assetsCount": len(r["assetsPaths"]),
                                 "error": r["error"],
                             }
                         )
@@ -328,6 +492,7 @@ async def capturar_site(
             await browser.close()
 
     falharam = sum(1 for pg in paginas if pg["status"] == "erro")
+    assets_baixados = sum(1 for v in assets_cache.values() if v)
     manifesto = {
         "url": url,
         "escopo": escopo,
@@ -337,6 +502,7 @@ async def capturar_site(
         "encontradas": len(visitadas),
         "processadas": len(paginas),
         "falharam": falharam,
+        "assetsDir": "assets" if opcoes.get("assets") else None,
         "paginas": paginas,
     }
     (out_path / "manifest.json").write_text(
@@ -351,6 +517,7 @@ async def capturar_site(
             "markdown": sum(1 for pg in paginas if pg["mdPath"]),
             "html": sum(1 for pg in paginas if pg["htmlPath"]),
             "screenshots": sum(1 for pg in paginas if pg["screenshotPath"]),
+            "assets": assets_baixados,
         },
         "paginas": paginas,
     }

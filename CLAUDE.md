@@ -44,7 +44,7 @@ npm run release        # gera installers/latest.json a partir do build assinado
 
 First-time setup / full build from clean machine: `npm run setup` (installs Rust, Node deps, Python venv, icons, sidecar, then builds the installer) or `npm run setup:dev` (same but launches `tauri dev` instead of building). See `scripts/setup.ps1`.
 
-Vite dev server is pinned to port **1420** (strictPort) — Tauri expects it there.
+Vite dev server is pinned to port **1520** (strictPort) — Tauri expects it there.
 
 ## Releases e atualizações
 

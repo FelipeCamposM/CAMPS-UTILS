@@ -803,6 +803,18 @@ empacotado dá `MODEL_ERROR`. Também: rebuild do sidecar tem que rodar **depois
       pulam a busca e a UI avisa sugerindo WebP. Guardas: não recodifica arquivo já abaixo do alvo,
       não devolve arquivo maior que o original. Tool
       `src/tools/image-compress/ImageCompressTool.tsx`, service `compressImages`. cargo test 6/6.
+- [x] **Converter imagens: suporte a HEIC/HEIF de entrada** — o crate `image` do Rust não lê
+      HEIC/HEIF. Novo `heic_to_png()` em `python/converter.py` (tool `heic_decode`, sidecar light —
+      `pillow-heif` traz libheif estático no wheel, sem DLL externa) decodifica pra um PNG temp em
+      `%TEMP%\camps-utils\heic\` (varrido no `RunEvent::Exit`, mesma limpeza do webcapture). Rust:
+      `convert_images`/`convert_one_image` viraram async, novo helper `open_image()` detecta
+      `.heic`/`.heif` por extensão e chama `decode_heic()` (via `run_python_tool`) antes de
+      `image::open`. `python/build.py`: `pillow_heif` entra em `LIGHT_COLLECTS`, sai de
+      `WHISPER_EXCLUDES`/`DEPTH_EXCLUDES` (não pertence a whisper/depth/rembg/webcapture — nenhum
+      deles chama `heic_decode`). `ImageConvertTool.tsx`: `heic`/`heif` em `IMAGE_EXTS`. Testes
+      novos: `TestHeicDecode` (round-trip real com `pillow_heif.from_pillow`, arquivo inexistente,
+      dispatch). Escopo: só "Converter imagens" — resize/compress ficam de fora por ora (mesmo
+      padrão de abrir arquivo, dá pra estender igual se pedido).
 - [x] **Comprimir vídeo** — Rust `compress_video` (ffmpeg H.264, CRF Leve/Médio/Forte), progresso
       real via ffprobe + `-progress pipe:1`. Tool `src/tools/video-compress/`. Pipeline validado
       headless (155KB→43KB). **Antecipado.**

@@ -16,6 +16,9 @@ faster-whisper>=1.2
 onnxruntime>=1.17
 numpy>=1.24
 Pillow>=10.0
+# Decodifica HEIC/HEIF pro conversor de imagens (o `image` crate do Rust não
+# lê o formato). Fica no bundle light: libheif vem estático no próprio wheel.
+pillow-heif>=1.0
 # Remoção de fundo (u2net). Vai no bundle `rembg` (130 MB medidos), não no
 # light. Instalar com `--no-deps` na .venv: os extras dele puxariam outra versão
 # de numpy/onnxruntime por cima das que o Docling e o Depth já usam.

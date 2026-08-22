@@ -24,6 +24,7 @@ import { VideoToGifTool } from "./video-to-gif/VideoToGifTool";
 import { VideoSubtitleTool } from "./video-subtitle/VideoSubtitleTool";
 import { VideoBurnTool } from "./video-burn/VideoBurnTool";
 import { WebCaptureTool } from "./web-capture/WebCaptureTool";
+import { WebCaptureImagesTool } from "./web-capture/WebCaptureImagesTool";
 
 export type ToolCategory = "documentos" | "imagens" | "midia" | "utilitarios";
 
@@ -249,6 +250,16 @@ export const TOOLS: ToolDef[] = [
     category: "utilitarios",
     icon: <Globe className="w-full h-full" />,
     component: WebCaptureTool,
+    module: "webcapture",
+    wide: true,
+  },
+  {
+    id: "web-capture-images",
+    name: "Capturar imagens",
+    description: "Navega um site de verdade e baixa todas as imagens encontradas.",
+    category: "utilitarios",
+    icon: <Image className="w-full h-full" />,
+    component: WebCaptureImagesTool,
     module: "webcapture",
     wide: true,
   },

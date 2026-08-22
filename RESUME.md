@@ -233,7 +233,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 > [!tip] Desenvolvimento somente de UI
-> Use `npm run dev:vite` quando não precisar testar diálogos, filesystem, processos ou conversões nativas. O servidor Vite usa obrigatoriamente a porta **1420** porque o Tauri espera `http://localhost:1420`.
+> Use `npm run dev:vite` quando não precisar testar diálogos, filesystem, processos ou conversões nativas. O servidor Vite usa obrigatoriamente a porta **1520** porque o Tauri espera `http://localhost:1520`.
 
 ## Build e distribuição
 
@@ -427,7 +427,7 @@ Para alterações visuais/nativas:
 
 - **Nome legado:** alguns identificadores ainda dizem `pdf-to-markdown` embora o produto seja CAMPS-UTILS.
 - **UI sem Tauri:** `npm run dev:vite` não executa `invoke()` nativo.
-- **Porta fixa:** a porta 1420 precisa estar livre.
+- **Porta fixa:** a porta 1520 precisa estar livre.
 - **Primeiro uso lento:** modelos podem ser baixados e inicializados.
 - **stdout contaminado:** um log Python pode invalidar toda a resposta JSON.
 - **Progresso Docling:** os passos exibidos são simulados.

@@ -1317,16 +1317,48 @@ pub struct ImageConvertArgs {
 /// Batch image conversion (webp/png/jpg/ico), native via the `image`/`webp` crates.
 /// Returns the list of output paths.
 #[tauri::command]
-pub async fn convert_images(args: ImageConvertArgs) -> Result<Vec<String>, String> {
+pub async fn convert_images(app: AppHandle, args: ImageConvertArgs) -> Result<Vec<String>, String> {
     let quality = args.quality.unwrap_or(85).clamp(1, 100);
     let fmt = args.format.to_lowercase();
     let mut outputs = Vec::with_capacity(args.inputs.len());
     for input in &args.inputs {
-        let out = convert_one_image(input, &fmt, args.out_dir.as_deref(), quality)
+        let out = convert_one_image(&app, input, &fmt, args.out_dir.as_deref(), quality)
+            .await
             .map_err(|e| format!("{input}: {e}"))?;
         outputs.push(out);
     }
     Ok(outputs)
+}
+
+/// `true` se a extensão for HEIC/HEIF — o crate `image` não lê esse formato.
+fn is_heic(path: &Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    ext == "heic" || ext == "heif"
+}
+
+/// Decodifica um HEIC/HEIF pra PNG via o sidecar Python (`pillow-heif`) e
+/// devolve o caminho do PNG temporário. Some com o resto do disco de temp
+/// (`%TEMP%\camps-utils`) no `RunEvent::Exit` — não precisa limpar aqui.
+async fn decode_heic(app: &AppHandle, src: &Path) -> Result<PathBuf, String> {
+    let input = serde_json::json!({ "inputPath": src.to_string_lossy() }).to_string();
+    let raw = run_python_tool(app, "heic_decode", &input).await?;
+    let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if v.get("success").and_then(|s| s.as_bool()) != Some(true) {
+        let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("falha ao decodificar HEIC");
+        return Err(msg.to_string());
+    }
+    let out = v.get("outputPath").and_then(|p| p.as_str()).ok_or("resposta inválida do sidecar")?;
+    Ok(PathBuf::from(out))
+}
+
+/// Abre qualquer imagem suportada, decodificando HEIC/HEIF via sidecar antes
+/// de entregar pro crate `image`.
+async fn open_image(app: &AppHandle, src: &Path) -> Result<image::DynamicImage, String> {
+    if is_heic(src) {
+        let png = decode_heic(app, src).await?;
+        return image::open(&png).map_err(|e| format!("falha ao abrir imagem: {e}"));
+    }
+    image::open(src).map_err(|e| format!("falha ao abrir imagem: {e}"))
 }
 
 fn ext_for(fmt: &str) -> &str {
@@ -1385,14 +1417,15 @@ fn write_image(
     std::fs::write(out_path, bytes).map_err(|e| e.to_string())
 }
 
-fn convert_one_image(
+async fn convert_one_image(
+    app: &AppHandle,
     input: &str,
     fmt: &str,
     out_dir: Option<&str>,
     quality: u8,
 ) -> Result<String, String> {
     let src = Path::new(input);
-    let img = image::open(src).map_err(|e| format!("falha ao abrir imagem: {e}"))?;
+    let img = open_image(app, src).await?;
 
     let stem = src
         .file_stem()

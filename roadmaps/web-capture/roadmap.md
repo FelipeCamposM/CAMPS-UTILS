@@ -61,3 +61,64 @@ inclui crawl completo de domínio (não fica pra v2). Peso medido do módulo: ~4
 - Heurística de tabs/accordions é best-effort — não cobre 100% dos sites.
 - Crawl de "domínio inteiro" sem `maxPaginas` pode demorar bastante em sites
   grandes (sem limite de tempo total, só de páginas/concorrência).
+
+## v2: seleção de conteúdo + assets + Capturar Imagens
+
+Motivação: com as 8 opções antigas todas ligadas por padrão, um crawl de site
+médio gerava arquivo demais pro usuário analisar depois. Pedido: escolher o
+que cada página retorna (só md+screenshot pré-marcados), extrair todos os
+assets do site (imagens/CSS/JS/fontes, inclusive de terceiros) pra dar pra
+remontar o site de um cliente, e uma ferramenta nova só pra baixar imagens.
+
+- [x] **1. Defaults** — `OPCOES_DEFAULT`/`OPCOES_PADRAO`/`opcoes_padrao` (3
+  cópias: `WebCaptureTool.tsx`, `webcapture.py`, `converter.py`) trocados pra
+  só `markdown`+`screenshot` ligados por padrão, resto desligado.
+- [x] **2. `assets` + `somenteImagens`** — `python/webcapture.py`:
+  `extrair_urls_assets()` (imagens/css/js, sem filtro de domínio),
+  `_urls_de_css()` (regex `url()` pra bg-image e `@font-face`), `_nome_asset()`
+  (hash da URL, evita colisão cross-origin), `_baixar_assets()` (via
+  `context.request`, dedupe por URL com lock+sentinel, sem dependência nova),
+  `_ler_css_local()` (relê CSS já baixado pra achar fontes sem golpe de rede
+  extra). Pasta compartilhada `out_dir/assets/`, `assetsPaths` por página no
+  manifesto, contador `arquivos.assets`. Guard novo: página sem nenhuma opção
+  de arquivo-por-página ligada não cria pasta vazia.
+- [x] **3. Frontend** — checkbox "Assets" em `WebCaptureTool.tsx` + contador no
+  resumo. Tipos novos em `conversionService.ts` (`CaptureOptions.assets`,
+  `CapturePageResult.assetsCount`, `CaptureResult.arquivos.assets`).
+- [x] **4. Nova ferramenta "Capturar Imagens"** —
+  `src/tools/web-capture/WebCaptureImagesTool.tsx` (novo arquivo, sem
+  checkboxes, `opcoes` fixo com `assets: true, somenteImagens: true`),
+  entrada `web-capture-images` em `registry.tsx` reaproveitando o mesmo
+  `module: "webcapture"` (sem novo comando Rust nem branch de dispatch —
+  mesma sidecar, `opcoes` diferente). `ModuleGate.tsx`: `usadoPor` atualizado.
+- [x] **5. Testes** — `python/test_converter.py`: `test_opcoes_default`
+  atualizado pros novos defaults; `TestExtrairUrlsAssets` (imagens/srcset,
+  css/js cross-origin, tipo não pedido fica de fora); `TestNomeAsset` (dedupe
+  por hash de URL não colide entre origens, determinístico). Suite completa:
+  95/95 passando. `npm run typecheck` limpo, `npm run test`: 104/104
+  passando.
+
+- [x] **6. Nome do asset + limpeza no fechar** — `_nome_asset()` trocado de
+  hash puro pra `<hash10>_<nome-original>` (mantém a origem legível, hash só
+  resolve colisão entre domínios que compartilham path). Confirmado por
+  inspeção real do disco: as pastas de captura (e também rembg/depth) nunca
+  eram limpas — acumulavam em `%TEMP%\camps-utils\` pra sempre. Fix:
+  `src-tauri/src/lib.rs` passou a usar `.build()` + `.run(|_, event| ...)`
+  e apaga `std::env::temp_dir().join("camps-utils")` inteiro em
+  `RunEvent::Exit` — cobre todos os módulos (webcapture/rembg/depth/etc), não
+  só webcapture, uma limpeza só ao fechar o app.
+
+### Cortes deliberados
+
+- Sem parser CSS de verdade — regex `url()` cobre o caso de uso (harvesting,
+  não validação de CSS).
+- Sem lock por URL — lock único do crawl com sentinel de reserva; risco
+  aceito: duas páginas pedindo a mesma URL nova ao mesmo tempo podem deixar
+  uma delas sem listar o asset em `assetsPaths` (o arquivo existe, só a
+  referência na página que "perdeu" a corrida fica de fora).
+- Sem dedupe por hash de conteúdo, sem sniff de magic bytes pra extensão.
+- Sem novo comando Rust/branch de dispatch pra Capturar Imagens — reaproveita
+  `capture_site` com `opcoes` fixo do lado do frontend.
+- Sem componente compartilhado entre `WebCaptureTool.tsx` e
+  `WebCaptureImagesTool.tsx` (`ESCOPOS`, `Resumo`) — duplicar 3-15 linhas é
+  mais barato que acoplar os dois arquivos.

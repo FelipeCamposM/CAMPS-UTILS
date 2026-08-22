@@ -129,7 +129,7 @@ npm run dev
 npm run dev:vite
 ```
 
-O servidor Vite usa obrigatoriamente a porta **1420**, configurada no Tauri.
+O servidor Vite usa obrigatoriamente a porta **1520**, configurada no Tauri.
 
 `npm run dev:vite` é útil para trabalhar apenas na interface. Diálogos, filesystem, processos e chamadas `invoke()` dependentes do Tauri não funcionarão nesse modo.
 
@@ -324,9 +324,9 @@ Antes de iniciar uma implementação, leia `CLAUDE.md`, este README e o roadmap 
 
 ## Solução de problemas
 
-### Porta 1420 ocupada
+### Porta 1520 ocupada
 
-O Vite usa `strictPort`. Encerre o processo que está usando a porta 1420 e execute novamente `npm run dev`.
+O Vite usa `strictPort`. Encerre o processo que está usando a porta 1520 e execute novamente `npm run dev`.
 
 ### `link.exe` não encontrado
 

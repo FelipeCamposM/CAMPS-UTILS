@@ -1,4 +1,4 @@
-import { Globe } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
@@ -25,29 +25,18 @@ const ESCOPOS: { value: CaptureScope; label: string }[] = [
   { value: "pagina_subpaginas", label: "Esta página + subpáginas" },
 ];
 
-const OPCOES_DEFAULT: CaptureOptions = {
+const OPCOES_IMAGENS: CaptureOptions = {
   texto: false,
-  markdown: true,
+  markdown: false,
   html: false,
   links: false,
-  screenshot: true,
+  screenshot: false,
   metadados: false,
   explorarTabsAccordions: false,
   scrollAutomatico: false,
-  assets: false,
+  assets: true,
+  somenteImagens: true,
 };
-
-const CHECKBOXES: { key: keyof CaptureOptions; label: string }[] = [
-  { key: "texto", label: "Texto" },
-  { key: "markdown", label: "Markdown" },
-  { key: "html", label: "HTML" },
-  { key: "links", label: "Links" },
-  { key: "screenshot", label: "Screenshot completa" },
-  { key: "metadados", label: "Metadados" },
-  { key: "explorarTabsAccordions", label: "Explorar tabs/accordions" },
-  { key: "scrollAutomatico", label: "Scroll automático" },
-  { key: "assets", label: "Assets (imagens, CSS, JS, fontes)" },
-];
 
 /** Resposta de falha que o sidecar pode emitir no lugar de um `CaptureResult`. */
 type CaptureFailure = { success: false; errorCode?: string; message: string };
@@ -57,14 +46,13 @@ function ehFalha(r: CaptureResult | CaptureFailure): r is CaptureFailure {
 }
 
 /**
- * Captura de site: crawl com Playwright no sidecar, extraindo texto/Markdown/
- * HTML/links/screenshot por página. O progresso grosso vem de `tool-progress`
- * e `tool-step`; a lista ao vivo vem de `capture-page-event`, um por página.
+ * Captura de imagens: mesmo crawler do "Capturar site", só que o resultado
+ * traz somente as imagens do site (opcoes fixo, sem checkboxes) — pra remake
+ * de site sem precisar pedir as imagens pro cliente.
  */
-export function WebCaptureTool({ addHistory }: ToolProps) {
+export function WebCaptureImagesTool({ addHistory }: ToolProps) {
   const [url, setUrl] = useState("");
   const [escopo, setEscopo] = useState<CaptureScope>("dominio");
-  const [opcoes, setOpcoes] = useState<CaptureOptions>(OPCOES_DEFAULT);
   const [maxPaginas, setMaxPaginas] = useState("");
   const [concorrencia, setConcorrencia] = useState(5);
 
@@ -76,10 +64,6 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
 
   const { progresso, etapa, zerar } = useToolProgress();
   const { paginas, zerar: zerarPaginas } = useCaptureEvents();
-
-  function toggleOpcao(key: keyof CaptureOptions) {
-    setOpcoes((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
 
   async function capturar() {
     if (!url.trim() || capturando) return;
@@ -93,18 +77,18 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
       const r = await captureSite({
         url: url.trim(),
         escopo,
-        opcoes,
+        opcoes: OPCOES_IMAGENS,
         maxPaginas: maxPaginas.trim() ? Number(maxPaginas) : null,
         concorrencia,
       });
       if (ehFalha(r)) {
-        setErro(r.message ?? "Falha ao capturar o site.");
+        setErro(r.message ?? "Falha ao capturar as imagens.");
         return;
       }
       setResultado(r);
       addHistory({
         id: crypto.randomUUID(),
-        tool: "web-capture",
+        tool: "web-capture-images",
         filename: url.trim(),
         inputPath: url.trim(),
         outputPath: r.outputDir,
@@ -113,7 +97,7 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
         success: r.falharam === 0,
       });
     } catch {
-      setErro("Falha ao iniciar a captura do site.");
+      setErro("Falha ao iniciar a captura de imagens.");
     } finally {
       setCapturando(false);
     }
@@ -123,7 +107,7 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
     if (!resultado || zipando) return;
     const destino = await save({
       filters: [{ name: "ZIP", extensions: ["zip"] }],
-      defaultPath: "captura-site.zip",
+      defaultPath: "imagens-site.zip",
     });
     if (!destino) return;
 
@@ -143,9 +127,9 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
 
   return (
     <div ref={toolRef} className="space-y-4">
-      <Field label="URL" htmlFor="web-capture-url">
+      <Field label="URL" htmlFor="web-capture-images-url">
         <Input
-          id="web-capture-url"
+          id="web-capture-images-url"
           type="url"
           placeholder="https://exemplo.com"
           value={url}
@@ -162,31 +146,10 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
         grow={false}
       />
 
-      <div className="space-y-1.5">
-        <span className="text-text-secondary text-xs font-medium block">Capturar</span>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {CHECKBOXES.map((c) => (
-            <label
-              key={c.key}
-              className="glass-inset flex items-center gap-2 px-2.5 py-2 text-xs text-text-secondary cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={opcoes[c.key]}
-                onChange={() => toggleOpcao(c.key)}
-                disabled={capturando}
-                className="accent-accent w-3.5 h-3.5"
-              />
-              {c.label}
-            </label>
-          ))}
-        </div>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Máximo de páginas" htmlFor="web-capture-max" description="Vazio = sem limite">
+        <Field label="Máximo de páginas" htmlFor="web-capture-images-max" description="Vazio = sem limite">
           <Input
-            id="web-capture-max"
+            id="web-capture-images-max"
             type="number"
             min={1}
             placeholder="Sem limite"
@@ -197,7 +160,7 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
         </Field>
 
         <Slider
-          id="web-capture-concorrencia"
+          id="web-capture-images-concorrencia"
           label="Concorrência"
           value={concorrencia}
           min={1}
@@ -214,7 +177,7 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
         disabled={!url.trim()}
         loading={capturando}
       >
-        {capturando ? "Capturando…" : "Capturar site"}
+        {capturando ? "Capturando…" : "Baixar imagens"}
       </Button>
 
       {capturando && (
@@ -231,14 +194,11 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
 
       {resultado && (
         <section className="glass glass-success glass-sheen p-4 space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <Resumo label="páginas encontradas" valor={resultado.encontradas} />
             <Resumo label="processadas" valor={resultado.processadas} />
             <Resumo label="falharam" valor={resultado.falharam} tom={resultado.falharam > 0 ? "danger" : undefined} />
-            <Resumo label="screenshots" valor={resultado.arquivos.screenshots} />
-            <Resumo label="Markdown" valor={resultado.arquivos.markdown} />
-            <Resumo label="HTML" valor={resultado.arquivos.html} />
-            <Resumo label="assets" valor={resultado.arquivos.assets} />
+            <Resumo label="imagens" valor={resultado.arquivos.assets} />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -259,7 +219,7 @@ export function WebCaptureTool({ addHistory }: ToolProps) {
       )}
 
       <p className="text-text-muted text-[11px] flex items-center gap-1.5">
-        <Globe className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <ImageIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
         A captura roda no seu computador com um navegador real — nada é enviado à nuvem.
       </p>
     </div>

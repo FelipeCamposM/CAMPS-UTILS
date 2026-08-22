@@ -45,6 +45,14 @@ pub fn run() {
             commands::save_markdown,
             commands::open_folder,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app_handle, event| {
+            // Ferramentas como capturar-site/rembg/depth escrevem em temp e nunca
+            // limpam sozinhas (cada rodada é uma pasta nova). Ao fechar o app —
+            // não a cada tela — apaga tudo de uma vez.
+            if let tauri::RunEvent::Exit = event {
+                let _ = std::fs::remove_dir_all(std::env::temp_dir().join("camps-utils"));
+            }
+        });
 }

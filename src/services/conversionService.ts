@@ -716,6 +716,9 @@ export interface CaptureOptions {
   metadados: boolean;
   explorarTabsAccordions: boolean;
   scrollAutomatico: boolean;
+  assets: boolean;
+  /** Interno — não é checkbox no tool principal, só a ferramenta Capturar Imagens seta. */
+  somenteImagens?: boolean;
 }
 
 export interface CaptureArgs {
@@ -732,6 +735,7 @@ export interface CapturePageResult {
   mdPath?: string;
   htmlPath?: string;
   screenshotPath?: string;
+  assetsCount?: number;
   error?: string;
 }
 
@@ -740,7 +744,7 @@ export interface CaptureResult {
   encontradas: number;
   processadas: number;
   falharam: number;
-  arquivos: { markdown: number; html: number; screenshots: number };
+  arquivos: { markdown: number; html: number; screenshots: number; assets: number };
   paginas: CapturePageResult[];
   durationMs: number;
 }

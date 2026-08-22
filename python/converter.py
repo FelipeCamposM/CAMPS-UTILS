@@ -913,6 +913,39 @@ def remove_bg(input_path: str | None) -> dict:
     }
 
 
+def heic_to_png(data: dict) -> dict:
+    """Decodifica HEIC/HEIF pra PNG — o `image` crate do Rust (quem faz o resto
+    da conversão de imagem) não lê esse formato. Fica no sidecar light, sem
+    módulo baixado: `pillow-heif` traz libheif estático no próprio wheel
+    (~6,5 MB), sem DLL externa pra gerenciar.
+    """
+    src = Path((data.get("inputPath") or "").strip())
+    if not src.is_file():
+        return make_error("INVALID_INPUT", "Arquivo HEIC não encontrado.")
+
+    try:
+        import pillow_heif
+        from PIL import Image
+
+        pillow_heif.register_heif_opener()
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Suporte a HEIC não encontrado. Verifique a instalação.")
+
+    out_dir = Path(tempfile.gettempdir()) / "camps-utils" / "heic"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{src.stem}-{int(time.time() * 1000)}.png"
+
+    try:
+        with Image.open(src) as img:
+            img.save(out_path, format="PNG")
+    except Exception as e:
+        log(f"HEIC_DECODE_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível abrir o arquivo HEIC.")
+
+    return {"success": True, "outputPath": str(out_path)}
+
+
 def _dir_trabalho_webcapture() -> Path:
     """Onde a captura de site escreve suas pastas, uma por execução.
 
@@ -938,14 +971,16 @@ def capture_site(data: dict) -> dict:
 
     escopo = data.get("escopo") or "pagina"
     opcoes_padrao = {
-        "texto": True,
+        "texto": False,
         "markdown": True,
-        "html": True,
-        "links": True,
+        "html": False,
+        "links": False,
         "screenshot": True,
-        "metadados": True,
-        "explorarTabsAccordions": True,
-        "scrollAutomatico": True,
+        "metadados": False,
+        "explorarTabsAccordions": False,
+        "scrollAutomatico": False,
+        "assets": False,
+        "somenteImagens": False,
     }
     opcoes = {**opcoes_padrao, **(data.get("opcoes") or {})}
     max_paginas = data.get("maxPaginas")
@@ -1634,6 +1669,9 @@ def dispatch(tool: str, data: dict) -> dict:
 
     if tool == "capture_site":
         return capture_site(data)
+
+    if tool == "heic_decode":
+        return heic_to_png(data)
 
     if tool == "depth_adjust":
         return depth_adjust(
