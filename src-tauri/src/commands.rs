@@ -339,8 +339,8 @@ const REMBG: RemoteModule = RemoteModule {
 /// Captura de site (Playwright dirigindo o Edge do Windows via `channel="msedge"`,
 /// sem baixar Chromium). ~46 MB medidos, na faixa do realesrgan/depth.
 const WEBCAPTURE: RemoteModule = RemoteModule {
-    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/webcapture-v1/camps-webcapture.zip",
-    sha256: "a7990e665875256f997784a71751e940e9dd82d6f1fefb11a8557a1a1cda78f8",
+    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/webcapture-v2/camps-webcapture.zip",
+    sha256: "bc88ce3a1aac7b2d5ae3a9bc2887863cccc872c26b9e3a3ab8c0bf67edbbbc2f",
     zip_name: "camps-webcapture.zip",
     event: "webcapture-progress",
     marker: "converter-webcapture-x86_64-pc-windows-msvc.exe",

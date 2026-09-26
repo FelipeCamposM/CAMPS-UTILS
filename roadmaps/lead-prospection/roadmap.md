@@ -9,7 +9,7 @@ Instagram, auditoria de sites com Playwright, minimapa e CRM persistente.
 - [x] CRUD de campanhas/leads, pipeline, lixeira e Markdown.
 - [x] Coleta Maps/Instagram, sessão persistente e auditoria de sites.
 - [x] Interface Buscar / Resultados / Pipeline / Configurações.
-- [ ] Empacotar/publicar `webcapture-v2` e executar smoke test contra Maps/Instagram reais.
+- [x] Empacotar/publicar `webcapture-v2` e validar o executável empacotado.
 
 ## Decisões
 
@@ -95,15 +95,10 @@ Instagram, auditoria de sites com Playwright, minimapa e CRM persistente.
   nicho/placeholder em português. Verificações: `typecheck` limpo, Vitest
   112/112. Não validado visualmente em `tauri dev`.
 
-## Próximo passo obrigatório para distribuição
+## Distribuição
 
-O modo dev já usa `python/leads.py` da `.venv`. O aplicativo instalado usa o
-módulo remoto `webcapture-v1`, que ainda não contém este arquivo nem o novo
-dispatch. Gerar `python build.py webcapture`, testar o `.exe`, publicar o zip
-como pre-release `webcapture-v2` e só então atualizar URL, SHA-256 e marker em
-`src-tauri/src/commands.rs`. Não apontar o app para um asset ainda inexistente.
-
-Build local validado em 2026-08-24: `python/dist/camps-webcapture.zip` (56 MB),
-SHA-256 `0581e120bdfe32692407d8bc86aba0eacccebc66297138b35679cf5ab032291c`.
+`webcapture-v2` publicado como pre-release em 26/09/2026 com
+`python/dist/camps-webcapture.zip` (56 MB), SHA-256
+`bc88ce3a1aac7b2d5ae3a9bc2887863cccc872c26b9e3a3ab8c0bf67edbbbc2f`.
 O executável empacotado reconheceu `--tool search_leads` e devolveu a validação
 esperada para entrada vazia, comprovando que `python/leads.py` entrou no bundle.

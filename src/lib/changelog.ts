@@ -24,6 +24,15 @@ export interface Novidade {
 /** Mais recente primeiro — a ordem da lista é a ordem daqui. */
 export const NOVIDADES: Novidade[] = [
   {
+    versao: "1.3.0",
+    data: "26/09/2026",
+    itens: [
+      "Nova ferramenta Prospecção de leads: busca empresas por nicho e local no Google Maps e Instagram, encontra oportunidades e organiza tudo por campanha.",
+      "Agora dá para auditar os sites encontrados, priorizar negócios sem site ou com páginas fracas e acompanhar os resultados em mapa e pipeline.",
+      "Nova ferramenta Editar texto do PDF: selecione textos direto na página, altere o conteúdo e salve uma nova cópia do documento.",
+    ],
+  },
+  {
     versao: "1.2.0",
     data: "18/08/2026",
     itens: [
