@@ -616,6 +616,208 @@ def pdf_pages(input_path: str | None, output_path: str | None, pages: list | Non
         return make_error("CONVERSION_FAILED", "Não foi possível montar o PDF.")
 
 
+def pdf_text_spans(input_path: str | None) -> dict:
+    """Extrai cada span de texto do PDF com bbox/fonte/tamanho/cor — a base
+    pra edição in-place: cada span vira uma caixa editável no lugar exato de
+    onde o texto está na página, não um textarea corrido."""
+    if not input_path:
+        return make_error("INVALID_INPUT", "Nenhum PDF informado.")
+    p = Path(input_path)
+    if not p.exists():
+        return make_error("FILE_NOT_FOUND", "Arquivo PDF não encontrado.")
+
+    try:
+        import fitz
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Biblioteca de PDF (PyMuPDF) não encontrada.")
+
+    try:
+        pages_out = []
+        with fitz.open(str(p)) as doc:
+            for page_idx, page in enumerate(doc):
+                spans_out = []
+                d = page.get_text("dict")
+                for b_i, block in enumerate(d.get("blocks", [])):
+                    for l_i, line in enumerate(block.get("lines", [])):
+                        for s_i, span in enumerate(line.get("spans", [])):
+                            texto = span.get("text", "")
+                            if not texto.strip():
+                                continue
+                            flags = span.get("flags", 0)
+                            c = span.get("color", 0)
+                            spans_out.append({
+                                "id": f"{page_idx}-{b_i}-{l_i}-{s_i}",
+                                "bbox": list(span["bbox"]),
+                                "text": texto,
+                                "font": span.get("font", ""),
+                                "size": span.get("size", 0.0),
+                                "color": [
+                                    ((c >> 16) & 255) / 255,
+                                    ((c >> 8) & 255) / 255,
+                                    (c & 255) / 255,
+                                ],
+                                "flags": flags,
+                            })
+                pages_out.append({
+                    "width": page.rect.width,
+                    "height": page.rect.height,
+                    "spans": spans_out,
+                })
+    except Exception as e:
+        log(f"PDF_TEXT_SPANS_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível ler o texto do PDF.")
+
+    return {"success": True, "pageCount": len(pages_out), "pages": pages_out}
+
+
+_BASE14 = {
+    (False, False, False): "Helvetica",
+    (False, False, True): "Helvetica-Bold",
+    (False, True, False): "Helvetica-Oblique",
+    (False, True, True): "Helvetica-BoldOblique",
+    (True, False, False): "Times-Roman",
+    (True, False, True): "Times-Bold",
+    (True, True, False): "Times-Italic",
+    (True, True, True): "Times-BoldItalic",
+}
+_MONO14 = {
+    (False, False): "Courier",
+    (False, True): "Courier-Bold",
+    (True, False): "Courier-Oblique",
+    (True, True): "Courier-BoldOblique",
+}
+
+
+def _base14_font(font_name: str, flags: int) -> str:
+    """Mapeia a fonte original (heurística: bits de `flags` + nome) pra uma
+    das 14 fontes embutidas do PyMuPDF — não é a fonte exata do PDF original
+    (extrair a fonte embutida de verdade seria `doc.extract_font()`, fora de
+    escopo aqui)."""
+    nome = (font_name or "").lower()
+    bold = bool(flags & 16)
+    italic = bool(flags & 2)
+    mono = bool(flags & 8) or "courier" in nome or "mono" in nome
+    if mono:
+        return _MONO14[(italic, bold)]
+    serif = bool(flags & 4) or "times" in nome or "serif" in nome or "georgia" in nome
+    return _BASE14[(serif, italic, bold)]
+
+
+def _fit_textbox(fitz_mod, text: str, fontname: str, rect, start: float):
+    """Acha `(tamanho_de_fonte, retangulo)` que cabe o texto — testado com
+    inserções REAIS numa página descartável (nunca salva), não estimado.
+
+    Por quê testar em vez de estimar: uma primeira versão calculava a altura
+    necessária via `get_text_length` (largura por palavra) e simulava quebra
+    de linha à mão. Divergiu do cálculo real do `insert_textbox` (a métrica
+    de linha que ele usa não é a bbox apertada dos glifos que
+    `get_text("dict")` devolve) — em teste manual, a estimativa disse "cabe a
+    14pt" e o `insert_textbox` real, chamado depois na página de verdade,
+    devolveu déficit e **não desenhou nada** (`insert_textbox` é
+    tudo-ou-nada: se não cabe, não desenha texto nenhum, não é um desenho
+    parcial). Testar com inserções reais numa página descartável usa o
+    próprio `insert_textbox` como fonte da verdade, sem risco de divergência
+    — e sem duplicar texto no PDF final, porque a página de teste nunca é
+    salva.
+
+    Se mesmo no tamanho mínimo (4pt) o texto não couber na caixa original
+    (edição bem maior que o espaço que havia), a caixa cresce pra baixo até
+    caber — nunca descarta texto que o usuário digitou silenciosamente. Isso
+    pode sobrepor o que estava visualmente abaixo na página; é o
+    compromisso aceito (documentado) da técnica.
+    """
+    piso = 4.0
+    scratch = fitz_mod.open()
+    try:
+        pagina_teste = scratch.new_page(width=rect.x1 + 50, height=rect.y1 + 5000)
+        size = start if start > 0 else 11.0
+        while size >= piso:
+            rc = pagina_teste.insert_textbox(rect, text, fontsize=size, fontname=fontname, color=(0, 0, 0), align=0)
+            if rc >= 0:
+                return size, rect
+            size -= 0.5
+
+        altura = rect.height
+        r = rect
+        for _ in range(20):
+            altura *= 1.5
+            r = fitz_mod.Rect(rect.x0, rect.y0, rect.x1, rect.y0 + altura)
+            rc = pagina_teste.insert_textbox(r, text, fontsize=piso, fontname=fontname, color=(0, 0, 0), align=0)
+            if rc >= 0:
+                return piso, r
+        return piso, r
+    finally:
+        scratch.close()
+
+
+def pdf_text_apply_edits(input_path: str | None, output_path: str | None, edits: list | None) -> dict:
+    """Redige (branco) e redesenha só os spans editados, no lugar exato de
+    onde estavam — o resto da página não é tocado.
+
+    Limitações assumidas: preenchimento branco na redação (texto sobre fundo
+    colorido/imagem vira um retângulo branco onde o texto antigo estava);
+    fonte é heurística (Base14, não a fonte embutida original); alinhamento
+    sempre à esquerda.
+    """
+    start = time.time()
+    if not input_path:
+        return make_error("INVALID_INPUT", "Nenhum PDF informado.")
+    p = Path(input_path)
+    if not p.exists():
+        return make_error("FILE_NOT_FOUND", "Arquivo PDF não encontrado.")
+    if not output_path:
+        return make_error("OUTPUT_ERROR", "Caminho de saída não informado.")
+    edits = edits or []
+
+    try:
+        import fitz
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Biblioteca de PDF (PyMuPDF) não encontrada.")
+
+    try:
+        with fitz.open(str(p)) as doc:
+            total = doc.page_count
+            por_pagina: dict[int, list[dict]] = {}
+            for e in edits:
+                pg = int(e.get("page", -1))
+                if pg < 0 or pg >= total:
+                    return make_error("INVALID_INPUT", f"Página {pg} fora do PDF.")
+                por_pagina.setdefault(pg, []).append(e)
+
+            for pg, lista in por_pagina.items():
+                page = doc[pg]
+
+                for e in lista:
+                    rect = fitz.Rect(e["bbox"]) & page.rect
+                    page.add_redact_annot(rect, fill=(1, 1, 1))
+                page.apply_redactions(images=0)
+
+                for e in lista:
+                    rect = fitz.Rect(e["bbox"]) & page.rect
+                    fontname = _base14_font(e.get("font", ""), e.get("flags", 0))
+                    color = tuple(e.get("color") or (0, 0, 0))
+                    texto = e.get("text", "")
+                    tamanho_original = float(e.get("size") or 11.0)
+                    tamanho, rect_final = _fit_textbox(fitz, texto, fontname, rect, tamanho_original)
+                    # Uma chamada só na página de verdade — repetir pra
+                    # "testar tamanho" duplica texto no PDF final
+                    # (insert_textbox desenha de verdade a cada chamada, não
+                    # existe modo "só simular"); o teste de tamanho já rodou
+                    # todo em `_fit_textbox`, numa página descartável.
+                    page.insert_textbox(rect_final, texto, fontsize=tamanho, fontname=fontname, color=color, align=0)
+
+            out = Path(output_path)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(str(out))
+    except Exception as e:
+        log(f"PDF_TEXT_APPLY_EDITS_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível salvar as edições no PDF.")
+
+    return {"success": True, "outputPath": str(out), "durationMs": int((time.time() - start) * 1000)}
+
+
 def pdf_compress(inputs: list[str], output_dir: str | None) -> dict:
     start = time.time()
     if not inputs:
@@ -1018,6 +1220,26 @@ def capture_site(data: dict) -> dict:
         "outputDir": str(out_dir),
         "durationMs": int((time.time() - start) * 1000),
     }
+
+
+def search_leads(data: dict) -> dict:
+    """Executa a prospecção Playwright mantendo o contrato stdout/stderr."""
+    try:
+        import asyncio
+        from leads import search_leads as executar
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Playwright não encontrado. Verifique a instalação.")
+    try:
+        return asyncio.run(executar(
+            data,
+            event=lambda evt: log(f"LEADEVENT:{json.dumps(evt, ensure_ascii=False)}"),
+            step=lambda texto: log(f"STEP: {texto}"),
+            progress=lambda valor: log(f"PROGRESS:{valor}"),
+        ))
+    except Exception as e:
+        log(f"LEAD_SEARCH_FAILED: {type(e).__name__}: {e}")
+        return make_error("CONVERSION_FAILED", "Não foi possível concluir a busca de leads.")
 
 
 def _modelo_em_cache(model_size: str) -> bool:
@@ -1658,6 +1880,16 @@ def dispatch(tool: str, data: dict) -> dict:
             data.get("pages") or None,
         )
 
+    if tool == "pdf_text_spans":
+        return pdf_text_spans(data.get("inputPath", "").strip() or None)
+
+    if tool == "pdf_text_apply_edits":
+        return pdf_text_apply_edits(
+            data.get("inputPath", "").strip() or None,
+            data.get("outputPath", "").strip() or None,
+            data.get("edits") or None,
+        )
+
     if tool == "depth_map":
         return depth_map(
             data.get("inputPath", "").strip() or None,
@@ -1669,6 +1901,9 @@ def dispatch(tool: str, data: dict) -> dict:
 
     if tool == "capture_site":
         return capture_site(data)
+
+    if tool == "search_leads":
+        return search_leads(data)
 
     if tool == "heic_decode":
         return heic_to_png(data)

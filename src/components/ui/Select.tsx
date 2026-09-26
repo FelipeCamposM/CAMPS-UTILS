@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FieldSize } from "./Input";
 
 export interface SelectOption<T extends string | number> {
@@ -41,6 +42,14 @@ const SIZE: Record<FieldSize, string> = {
  *
  * O que isso obriga a reimplementar (e está aqui): papéis ARIA de
  * combobox/listbox, navegação por teclado, fechar no Esc e no clique fora.
+ *
+ * ⚠️ **A lista vai num portal para o `<body>`.** Vários selects moram dentro
+ * de `.glass` (`backdrop-filter` cria contexto de empilhamento próprio), e aí
+ * o `z-50` do popover só compete com os irmãos daquele `.glass` — cards
+ * pintados depois na página cobriam a lista mesmo com z-index maior (mesma
+ * armadilha documentada em `NotificationBell.tsx`). O preço é posicionar à
+ * mão (`fixed` + medida do botão), olhar dois refs no clique-fora, e fechar
+ * no scroll/resize (um `fixed` não acompanha o scroll do container sozinho).
  */
 export function Select<T extends string | number>({
   id,
@@ -57,8 +66,9 @@ export function Select<T extends string | number>({
   const [aberto, setAberto] = useState(false);
   const [ativo, setAtivo] = useState(0);
   const [busca, setBusca] = useState("");
-  const [paraCima, setParaCima] = useState(false);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
   const raizRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const listaRef = useRef<HTMLUListElement>(null);
   const buscaRef = useRef<HTMLInputElement>(null);
   const autoId = useId();
@@ -87,10 +97,26 @@ export function Select<T extends string | number>({
   useEffect(() => {
     if (!aberto) return;
     function onDown(e: PointerEvent) {
-      if (!raizRef.current?.contains(e.target as Node)) setAberto(false);
+      const alvo = e.target as Node;
+      // Dois refs: com o portal, a lista não é mais descendente do botão.
+      if (raizRef.current?.contains(alvo) || popoverRef.current?.contains(alvo)) return;
+      setAberto(false);
     }
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
+  }, [aberto]);
+
+  // `fixed` não acompanha o scroll do container sozinho — fecha em vez de
+  // deixar o popover flutuando longe do botão que o abriu.
+  useEffect(() => {
+    if (!aberto) return;
+    const fechar = () => setAberto(false);
+    window.addEventListener("resize", fechar);
+    window.addEventListener("scroll", fechar, true);
+    return () => {
+      window.removeEventListener("resize", fechar);
+      window.removeEventListener("scroll", fechar, true);
+    };
   }, [aberto]);
 
   // Abre para cima quando não cabe embaixo — a lista tem até 240px e vários
@@ -103,7 +129,14 @@ export function Select<T extends string | number>({
       return;
     }
     const r = raizRef.current?.getBoundingClientRect();
-    if (r) setParaCima(window.innerHeight - r.bottom < 260 && r.top > 260);
+    if (r) {
+      const cima = window.innerHeight - r.bottom < 260 && r.top > 260;
+      setPos(
+        cima
+          ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4 }
+          : { left: r.left, width: r.width, top: r.bottom + 4 }
+      );
+    }
     setAtivo(selecionadoIdx >= 0 ? selecionadoIdx : 0);
     buscaRef.current?.focus();
     // `selecionadoIdx` de propósito fora das deps: ele muda a cada tecla
@@ -216,12 +249,11 @@ export function Select<T extends string | number>({
         />
       </button>
 
-      {aberto && (
+      {aberto && pos && createPortal(
         <div
-          className={[
-            "popover absolute left-0 right-0 z-50 p-1",
-            paraCima ? "bottom-full mb-1" : "top-full mt-1",
-          ].join(" ")}
+          ref={popoverRef}
+          style={{ position: "fixed", left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}
+          className="popover z-50 p-1"
         >
           {searchable && (
             <div className="relative mb-1">
@@ -292,7 +324,8 @@ export function Select<T extends string | number>({
               );
             })}
           </ul>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

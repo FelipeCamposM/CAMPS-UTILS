@@ -1,0 +1,6 @@
+import { Button, Slider } from "../../components/ui";
+import type { ScoreWeights } from "../../types/leads";
+
+interface LeadSettingsProps { weights: ScoreWeights; onChange:(weights:ScoreWeights)=>void; onSave:()=>void; onClearSession:()=>void; }
+const LABEL: Record<keyof ScoreWeights,string>={noSite:"Sem site",brokenSite:"Site quebrado",weakSite:"Site fraco",socialOnly:"Somente redes",instagram:"Instagram ativo",contact:"Contato disponível",reviews:"Avaliações",distance:"Proximidade"};
+export function LeadSettings({weights,onChange,onSave,onClearSession}:LeadSettingsProps){return <div className="grid gap-4 lg:grid-cols-2"><section className="glass p-4 space-y-3"><h2 className="text-sm font-medium">Pesos do score</h2>{(Object.keys(weights) as Array<keyof ScoreWeights>).map((key)=><Slider key={key} id={`weight-${key}`} label={LABEL[key]} value={weights[key]} min={0} max={50} onChange={(v)=>onChange({...weights,[key]:v})}/>)}<Button variant="primary" onClick={onSave}>Salvar pesos</Button></section><section className="glass p-4 space-y-3"><h2 className="text-sm font-medium">Sessão do Instagram</h2><p className="text-xs text-text-muted">O login fica somente no perfil local do Edge. Apague a sessão se trocar de conta ou não quiser manter cookies.</p><Button variant="danger" onClick={onClearSession}>Apagar sessão local</Button></section></div>}

@@ -16,3 +16,7 @@ export { FilePicker } from "./FilePicker";
 export type { FilePickerProps } from "./FilePicker";
 export { ResultPanel } from "./ResultPanel";
 export type { ResultPanelProps } from "./ResultPanel";
+export { Tabs } from "./Tabs";
+export type { TabsProps, TabOption } from "./Tabs";
+export { Badge } from "./Badge";
+export type { BadgeProps } from "./Badge";

@@ -371,7 +371,7 @@ def build_webcapture(triple: str) -> None:
 
     print(f"\nZip:    {zip_path}  ({zip_path.stat().st_size // (1024*1024)} MB)")
     print(f"SHA256: {sha}")
-    print("\n>> Suba 'camps-webcapture.zip' num Release com a tag 'webcapture-v1' (marcado como "
+    print("\n>> Suba 'camps-webcapture.zip' num Release com a tag 'webcapture-v2' (marcado como "
           "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> WEBCAPTURE.sha256")
 
 

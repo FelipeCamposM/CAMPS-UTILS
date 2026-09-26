@@ -803,6 +803,31 @@ empacotado dá `MODEL_ERROR`. Também: rebuild do sidecar tem que rodar **depois
       pulam a busca e a UI avisa sugerindo WebP. Guardas: não recodifica arquivo já abaixo do alvo,
       não devolve arquivo maior que o original. Tool
       `src/tools/image-compress/ImageCompressTool.tsx`, service `compressImages`. cargo test 6/6.
+- [x] **Editar texto do PDF (v1, descartada)** — primeira versão extraía todo o texto pra um
+      `<textarea>` único e regenerava o PDF do zero via xhtml2pdf (`pdf_text_read`/`pdf_text_write`).
+      Testada manualmente pelo usuário: destruía o layout inteiro. Substituída pela v2 abaixo —
+      `pdf_text_read`/`pdf_text_write` e seus testes foram removidos, não existem mais no código.
+- [x] **Editar texto do PDF (v2, in-place)** — reconstrução completa: mostra o PDF exatamente como
+      ele é (canvas pdf.js, `usePdfDocument`/`getPageSize` novo) e cada span de texto vira uma
+      caixa editável posicionada em cima do pixel certo — só entra máscara branca+HTML quando o
+      span está sendo editado ou já tem edição pendente, o resto do canvas fica intocado.
+      Backend novo em `python/converter.py`: `pdf_text_spans()` (`page.get_text("dict")`, achata
+      bbox/fonte/tamanho/cor/flags por span) e `pdf_text_apply_edits()` (redige em branco só os
+      spans editados via `add_redact_annot`+`apply_redactions(images=0)`, redesenha com
+      `insert_textbox` numa fonte Base14 mapeada por heurística de `flags`/nome).
+      **Duas armadilhas reais de PyMuPDF, confirmadas testando código de verdade antes de escrever
+      a versão final** (não suposição): (1) `insert_textbox` desenha de verdade a cada chamada —
+      tentar "testar vários tamanhos até caber" duplica texto no PDF final, mesmo usando
+      `render_mode=3` (invisível ainda fica extraível); resolvido calculando o tamanho em uma
+      página descartável nunca salva (`_fit_textbox`), só UMA chamada real por span. (2)
+      `insert_textbox` é tudo-ou-nada — se não cabe, não desenha nada (não é parcial); a estimativa
+      de altura por `get_text_length` divergiu do cálculo real dele. Fallback quando nem no piso de
+      4pt cabe: cresce a caixa pra baixo até caber, nunca descarta texto do usuário. Testes novos:
+      `TestPdfTextSpans`/`TestPdfTextApplyEdits`/`TestPdfTextDispatch`, com teste específico de
+      não-duplicação (regressão do achado acima). Sem módulo novo — mesmo bundle light de
+      `pdf_merge` (PyMuPDF já embarcado). Limitações assumidas e visíveis na UI: redação preenche
+      de branco (texto sobre imagem/cor de fundo vira retângulo branco), fonte é heurística
+      (Base14, não a fonte embutida original), alinhamento sempre à esquerda.
 - [x] **Converter imagens: suporte a HEIC/HEIF de entrada** — o crate `image` do Rust não lê
       HEIC/HEIF. Novo `heic_to_png()` em `python/converter.py` (tool `heic_decode`, sidecar light —
       `pillow-heif` traz libheif estático no wheel, sem DLL externa) decodifica pra um PNG temp em

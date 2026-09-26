@@ -59,4 +59,9 @@ describe("CSP do tauri.conf.json", () => {
   it("worker-src permite o worker do pdf.js (mesma origem)", () => {
     expect(diretiva("worker-src")).toContain("'self'");
   });
+
+  it("permite carregar os tiles do minimapa de leads", () => {
+    expect(diretiva("img-src")).toContain("https://*.tile.openstreetmap.org");
+    expect(diretiva("connect-src")).toContain("https://*.tile.openstreetmap.org");
+  });
 });

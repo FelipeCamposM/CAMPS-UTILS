@@ -874,3 +874,18 @@
   --tw-prose-th-borders: rgb(var(--c-border-subtle));
   --tw-prose-td-borders: rgb(var(--c-border-subtle));
 }
+
+.lead-map-marker span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid white;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.55);
+  transition: transform 160ms ease;
+}
+
+.leaflet-container {
+  background: rgb(var(--c-bg-elevated));
+  font-family: inherit;
+}

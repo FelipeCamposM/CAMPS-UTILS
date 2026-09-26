@@ -1,12 +1,13 @@
 import type { ReactNode, ComponentType } from "react";
 import type { ModuleId } from "../components/ModuleGate";
-import { Braces, Captions, CirclePlay, Eraser, FileOutput, FileText, FileType, Film, Globe, Hash, Image, Layers, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
+import { Braces, Captions, CirclePlay, Eraser, FileEdit, FileOutput, FileText, FileType, Film, Globe, Hash, Image, Layers, MapPinned, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
 import type { AppSettings } from "../types/settings";
 import type { HistoryEntry } from "../types/conversion";
 import { PdfToMarkdownTool } from "./pdf-to-markdown/PdfToMarkdownTool";
 import { MarkdownToPdfTool } from "./markdown-to-pdf/MarkdownToPdfTool";
 import { DocxToPdfTool } from "./docx-to-pdf/DocxToPdfTool";
 import { PdfToolsTool } from "./pdf-tools/PdfToolsTool";
+import { EditPdfTextTool } from "./edit-pdf-text/EditPdfTextTool";
 import { ImageConvertTool } from "./image-convert/ImageConvertTool";
 import { ImageResizeTool } from "./image-resize/ImageResizeTool";
 import { ImageCompressTool } from "./image-compress/ImageCompressTool";
@@ -25,8 +26,9 @@ import { VideoSubtitleTool } from "./video-subtitle/VideoSubtitleTool";
 import { VideoBurnTool } from "./video-burn/VideoBurnTool";
 import { WebCaptureTool } from "./web-capture/WebCaptureTool";
 import { WebCaptureImagesTool } from "./web-capture/WebCaptureImagesTool";
+import { LeadsTool } from "./leads/LeadsTool";
 
-export type ToolCategory = "documentos" | "imagens" | "midia" | "utilitarios";
+export type ToolCategory = "negocios" | "documentos" | "imagens" | "midia" | "utilitarios";
 
 /** Props que todo componente de ferramenta recebe. */
 export interface ToolProps {
@@ -52,6 +54,7 @@ export interface ToolDef {
 }
 
 export const CATEGORY_LABELS: Record<ToolCategory, string> = {
+  negocios: "Negócios",
   documentos: "Documentos",
   imagens: "Imagens",
   midia: "Mídia",
@@ -59,6 +62,7 @@ export const CATEGORY_LABELS: Record<ToolCategory, string> = {
 };
 
 export const CATEGORY_ORDER: ToolCategory[] = [
+  "negocios",
   "documentos",
   "imagens",
   "midia",
@@ -66,6 +70,16 @@ export const CATEGORY_ORDER: ToolCategory[] = [
 ];
 
 export const TOOLS: ToolDef[] = [
+  {
+    id: "leads",
+    name: "Prospecção de leads",
+    description: "Encontra empresas, audita sites e organiza oportunidades em um CRM local.",
+    category: "negocios",
+    icon: <MapPinned className="w-full h-full" />,
+    component: LeadsTool,
+    module: "webcapture",
+    wide: true,
+  },
   {
     id: "pdf-to-markdown",
     name: "PDF → Markdown",
@@ -99,6 +113,14 @@ export const TOOLS: ToolDef[] = [
     icon: <Scissors className="w-full h-full" />,
     component: PdfToolsTool,
     wide: true,
+  },
+  {
+    id: "edit-pdf-text",
+    name: "Editar texto do PDF",
+    description: "Extrai o texto de um PDF para editar e gera um novo PDF com o conteúdo revisado.",
+    category: "documentos",
+    icon: <FileEdit className="w-full h-full" />,
+    component: EditPdfTextTool,
   },
   {
     id: "image-convert",

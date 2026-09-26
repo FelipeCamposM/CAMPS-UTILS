@@ -12,6 +12,13 @@ O projeto começou como **PDF to Markdown** e evoluiu para uma aplicação multi
 
 ## Funcionalidades
 
+### Negócios
+
+- Buscar empresas por nicho, local e raio no Google Maps e Instagram com Playwright
+- Auditar sites ausentes, quebrados ou fracos e priorizar oportunidades por score
+- Visualizar resultados em minimapa e organizar contatos em um pipeline local
+- Importar e exportar campanhas em Markdown; dados persistidos em SQLite
+
 ### Documentos
 
 - PDF → Markdown com Docling e OCR
@@ -51,6 +58,7 @@ A internet é usada apenas quando necessário para:
 - procurar e instalar atualizações do aplicativo;
 - baixar módulos opcionais na primeira utilização;
 - baixar pesos de modelos de IA local.
+- realizar buscas de leads, auditorias de sites e carregar o minimapa.
 
 ## Arquitetura
 
@@ -70,6 +78,7 @@ flowchart LR
 - **Python:** Docling, OCR, documentos, PDFs, transcrição e depth map.
 - **ffmpeg:** vídeo, áudio, GIF, download e processamento de legendas.
 - **localStorage:** configurações e histórico local.
+- **SQLite:** campanhas, leads, pipeline, notas, tags e lixeira da prospecção.
 
 As ferramentas são registradas em `src/tools/registry.tsx`, fonte única para a Home e a Sidebar.
 

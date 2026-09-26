@@ -26,6 +26,8 @@ from converter import (
     pdf_merge,
     pdf_pages,
     pdf_split,
+    pdf_text_apply_edits,
+    pdf_text_spans,
     validate_input,
 )
 
@@ -475,6 +477,177 @@ class TestPdfPages:
         out = tmp_path / "nova" / "sel.pdf"
         result = pdf_pages(str(src), str(out), [2])
         assert result["success"] is True, result
+        assert out.exists()
+
+
+def _make_pdf_with_text(path, texts: list[str]):
+    import fitz
+
+    doc = fitz.open()
+    for texto in texts:
+        page = doc.new_page()
+        page.insert_text((72, 72), texto)
+    doc.save(str(path))
+    doc.close()
+
+
+def _make_pdf_with_spans(path, pages: list[list[dict]]):
+    """pages: [[{"text": "...", "pos": (x,y), "fontsize": 11, "fontname": "Helvetica"}]]"""
+    import fitz
+
+    doc = fitz.open()
+    for page_spans in pages:
+        page = doc.new_page()
+        for s in page_spans:
+            page.insert_text(
+                s["pos"], s["text"],
+                fontsize=s.get("fontsize", 11), fontname=s.get("fontname", "Helvetica"),
+            )
+    doc.save(str(path))
+    doc.close()
+
+
+class TestPdfTextSpans:
+    def test_extrai_span_com_bbox_fonte_tamanho(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "ola mundo", "pos": (72, 72), "fontsize": 14}]])
+
+        r = pdf_text_spans(str(src))
+        assert r["success"] is True, r
+        assert r["pageCount"] == 1
+        spans = r["pages"][0]["spans"]
+        assert len(spans) == 1
+        assert spans[0]["text"] == "ola mundo"
+        assert spans[0]["size"] == 14.0
+        assert len(spans[0]["bbox"]) == 4
+
+    def test_dimensoes_de_pagina(self, tmp_path):
+        import fitz
+
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "x", "pos": (72, 72)}]])
+
+        r = pdf_text_spans(str(src))
+        with fitz.open(str(src)) as doc:
+            rect = doc[0].rect
+        assert r["pages"][0]["width"] == rect.width
+        assert r["pages"][0]["height"] == rect.height
+
+    def test_pagina_so_espaco_nao_gera_spans(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[]])
+
+        r = pdf_text_spans(str(src))
+        assert r["success"] is True, r
+        assert r["pages"][0]["spans"] == []
+
+    def test_arquivo_inexistente(self):
+        r = pdf_text_spans("C:/nao/existe.pdf")
+        assert r["errorCode"] == "FILE_NOT_FOUND"
+
+    def test_sem_input_path(self):
+        r = pdf_text_spans(None)
+        assert r["errorCode"] == "INVALID_INPUT"
+
+
+class TestPdfTextApplyEdits:
+    def test_edicao_simples(self, tmp_path):
+        import fitz
+
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "texto original", "pos": (72, 72), "fontsize": 14}]])
+        spans = pdf_text_spans(str(src))["pages"][0]["spans"]
+        bbox = spans[0]["bbox"]
+
+        out = tmp_path / "editado.pdf"
+        edits = [{"page": 0, "bbox": bbox, "font": "Helvetica", "size": 14, "color": [0, 0, 0], "flags": 0, "text": "texto novo"}]
+        r = pdf_text_apply_edits(str(src), str(out), edits)
+        assert r["success"] is True, r
+
+        with fitz.open(str(out)) as doc:
+            texto = doc[0].get_text("text")
+        assert "texto novo" in texto
+        assert "original" not in texto
+
+    def test_nao_duplica_texto_no_pdf_final(self, tmp_path):
+        """Regressão: repetir insert_textbox pra 'testar tamanho' desenha
+        texto duplicado — o texto editado tem que aparecer exatamente 1 vez."""
+        import fitz
+
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "texto original", "pos": (72, 72), "fontsize": 14}]])
+        spans = pdf_text_spans(str(src))["pages"][0]["spans"]
+        bbox = spans[0]["bbox"]
+
+        out = tmp_path / "editado.pdf"
+        edits = [{"page": 0, "bbox": bbox, "font": "Helvetica", "size": 14, "color": [0, 0, 0], "flags": 0, "text": "marcador-unico-xyz"}]
+        r = pdf_text_apply_edits(str(src), str(out), edits)
+        assert r["success"] is True, r
+
+        with fitz.open(str(out)) as doc:
+            texto = doc[0].get_text("text")
+        assert texto.count("marcador-unico-xyz") == 1
+
+    def test_texto_maior_que_a_caixa_nao_trava(self, tmp_path):
+        import fitz
+
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "curto", "pos": (72, 72), "fontsize": 14}]])
+        spans = pdf_text_spans(str(src))["pages"][0]["spans"]
+        bbox = spans[0]["bbox"]  # caixa pequena, texto novo bem maior
+
+        out = tmp_path / "editado.pdf"
+        texto_longo = "um texto bem mais longo do que a caixa original suporta em uma linha só " * 3
+        edits = [{"page": 0, "bbox": bbox, "font": "Helvetica", "size": 14, "color": [0, 0, 0], "flags": 0, "text": texto_longo}]
+        r = pdf_text_apply_edits(str(src), str(out), edits)
+        assert r["success"] is True, r
+        with fitz.open(str(out)) as doc:
+            texto_extraido = doc[0].get_text("text").replace("\n", " ")
+        assert "mais longo" in texto_extraido
+
+    def test_pagina_fora_do_intervalo(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "x", "pos": (72, 72)}]])
+        edits = [{"page": 5, "bbox": [0, 0, 10, 10], "font": "Helvetica", "size": 11, "color": [0, 0, 0], "flags": 0, "text": "y"}]
+        r = pdf_text_apply_edits(str(src), str(tmp_path / "out.pdf"), edits)
+        assert r["errorCode"] == "INVALID_INPUT"
+
+    def test_sem_edicoes_e_no_op(self, tmp_path):
+        import fitz
+
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "x", "pos": (72, 72)}]])
+        out = tmp_path / "out.pdf"
+        r = pdf_text_apply_edits(str(src), str(out), [])
+        assert r["success"] is True, r
+        with fitz.open(str(out)) as doc:
+            assert "x" in doc[0].get_text("text")
+
+    def test_arquivo_inexistente(self):
+        r = pdf_text_apply_edits("C:/nao/existe.pdf", "C:/tmp/out.pdf", [])
+        assert r["errorCode"] == "FILE_NOT_FOUND"
+
+    def test_sem_output_path(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_spans(src, [[{"text": "x", "pos": (72, 72)}]])
+        r = pdf_text_apply_edits(str(src), None, [])
+        assert r["errorCode"] == "OUTPUT_ERROR"
+
+
+class TestPdfTextDispatch:
+    def test_dispatch_pdf_text_spans(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_text(src, ["ola mundo"])
+        r = dispatch("pdf_text_spans", {"inputPath": str(src)})
+        assert r["success"] is True, r
+        assert r["pageCount"] == 1
+
+    def test_dispatch_pdf_text_apply_edits(self, tmp_path):
+        src = tmp_path / "doc.pdf"
+        _make_pdf_with_text(src, ["x"])
+        out = tmp_path / "out.pdf"
+        r = dispatch("pdf_text_apply_edits", {"inputPath": str(src), "outputPath": str(out), "edits": []})
+        assert r["success"] is True, r
         assert out.exists()
 
 

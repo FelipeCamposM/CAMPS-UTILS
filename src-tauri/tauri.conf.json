@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost https://*.ytimg.com https://img.youtube.com https://*.ggpht.com; connect-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost; media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; worker-src 'self' blob:",
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost https://*.ytimg.com https://img.youtube.com https://*.ggpht.com https://*.tile.openstreetmap.org; connect-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost https://*.tile.openstreetmap.org; media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; worker-src 'self' blob:",
       "assetProtocol": {
         "enable": true,
         "scope": [

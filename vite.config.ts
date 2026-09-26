@@ -41,5 +41,12 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Restringe a descoberta aos testes frontend. O pytest mantém seu cache na
+    // raiz e, no Windows, outro processo pode deixá-lo sem permissão de leitura.
+    dir: "src",
+    // Os testes de App usam animações/transições e ficam instáveis quando
+    // vários arquivos jsdom disputam CPU. Execução serial é mais lenta, porém
+    // reproduzível no Windows e no CI.
+    fileParallelism: false,
   },
 });

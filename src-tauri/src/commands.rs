@@ -27,6 +27,10 @@ fn emit_progress_lines(app: &AppHandle, tool: &str, text: &str) {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(rest.trim()) {
                 let _ = app.emit("capture-page-event", val);
             }
+        } else if let Some(rest) = trimmed.strip_prefix("LEADEVENT:") {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(rest.trim()) {
+                let _ = app.emit("lead-search-event", val);
+            }
         }
     }
     eprint!("[converter/{tool}] {text}");
@@ -52,7 +56,7 @@ async fn run_python_tool(app: &AppHandle, tool: &str, input_json: &str) -> Resul
             // 45 MB baixados nem recarregar modelo nenhum.
             "depth_map" => run_module_sidecar(app, depth_exe_path(app), "DEPTH_MISSING", tool, input_json).await,
             "remove_bg" => run_module_sidecar(app, rembg_exe_path(app), "REMBG_MISSING", tool, input_json).await,
-            "capture_site" => run_module_sidecar(app, webcapture_exe_path(app), "WEBCAPTURE_MISSING", tool, input_json).await,
+            "capture_site" | "search_leads" => run_module_sidecar(app, webcapture_exe_path(app), "WEBCAPTURE_MISSING", tool, input_json).await,
             _ => run_sidecar_python(app, tool, input_json).await,
         }
     }
@@ -2165,6 +2169,23 @@ pub async fn open_folder(app: AppHandle, file_path: String) -> Result<(), String
     app.opener()
         .open_path(folder.to_string_lossy().as_ref(), None::<&str>)
         .map_err(|e| format!("Não foi possível abrir a pasta: {e}"))
+}
+
+/// Opens a validated web/contact URL in the operating system's default app.
+/// Kept as an app command so lead actions do not fail silently on plugin ACL
+/// differences between development and packaged builds.
+#[tauri::command]
+pub fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    let normalized = url.trim();
+    let allowed = ["https://", "http://", "mailto:", "tel:"]
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix));
+    if !allowed || normalized.chars().any(char::is_control) {
+        return Err("URL externa inválida ou não permitida.".to_string());
+    }
+    app.opener()
+        .open_url(normalized, None::<&str>)
+        .map_err(|e| format!("Não foi possível abrir o link: {e}"))
 }
 
 #[cfg(test)]

@@ -36,6 +36,8 @@ export interface PdfDocumentState {
   error: string | null;
   /** Desenha a página `n` (1-based) no canvas, com `cssWidth` de largura. */
   renderPage: (n: number, canvas: HTMLCanvasElement, cssWidth: number) => Promise<void>;
+  /** Dimensões da página `n` (1-based) em pontos PDF, pra posicionar overlays. */
+  getPageSize: (n: number) => Promise<{ widthPt: number; heightPt: number }>;
 }
 
 export function usePdfDocument(path: string | null): PdfDocumentState {
@@ -109,5 +111,13 @@ export function usePdfDocument(path: string | null): PdfDocumentState {
     []
   );
 
-  return { pageCount, loading, error, renderPage };
+  const getPageSize = useCallback(async (n: number) => {
+    const doc = docRef.current;
+    if (!doc) return { widthPt: 0, heightPt: 0 };
+    const page = await doc.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    return { widthPt: base.width, heightPt: base.height };
+  }, []);
+
+  return { pageCount, loading, error, renderPage, getPageSize };
 }

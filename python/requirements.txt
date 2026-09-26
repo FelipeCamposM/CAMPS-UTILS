@@ -6,7 +6,7 @@ xhtml2pdf>=0.2.16
 mammoth>=1.8
 PyMuPDF>=1.24
 pikepdf>=8.0
-yt-dlp>=2024.0
+yt-dlp>=2026.08.19
 # Legenda automática. Vai no bundle `whisper` (~90 MB), não no light — mas
 # precisa estar na .venv porque em dev o Rust roda o converter.py direto daqui.
 faster-whisper>=1.2

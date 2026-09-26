@@ -72,6 +72,58 @@ export async function runTool<T = unknown>(
   return parseLastJson<T>(raw);
 }
 
+/** Um span de texto do PDF: bbox/fonte/tamanho/cor, no lugar exato de onde está na página. */
+export interface PdfTextSpan {
+  id: string;
+  page: number; // índice 0-based no array `pages` de PdfTextSpansResult
+  bbox: [number, number, number, number];
+  text: string;
+  font: string;
+  size: number;
+  color: [number, number, number];
+  flags: number;
+}
+
+export interface PdfTextSpansResult {
+  success: boolean;
+  pageCount?: number;
+  pages?: { width: number; height: number; spans: Omit<PdfTextSpan, "page">[] }[];
+  errorCode?: string;
+  message?: string;
+}
+
+/** Extrai os spans de texto (bbox/fonte/tamanho) de cada página do PDF, para edição in-place. */
+export async function getPdfTextSpans(inputPath: string): Promise<PdfTextSpansResult> {
+  return runTool<PdfTextSpansResult>("pdf_text_spans", { inputPath });
+}
+
+export interface PdfTextEdit {
+  page: number;
+  bbox: [number, number, number, number];
+  font: string;
+  size: number;
+  color: [number, number, number];
+  flags: number;
+  text: string;
+}
+
+export interface ApplyPdfTextEditsResult {
+  success: boolean;
+  outputPath?: string;
+  durationMs?: number;
+  errorCode?: string;
+  message?: string;
+}
+
+/** Redige e redesenha só os spans editados, no lugar exato de onde estavam. */
+export async function applyPdfTextEdits(
+  inputPath: string,
+  outputPath: string,
+  edits: PdfTextEdit[]
+): Promise<ApplyPdfTextEditsResult> {
+  return runTool<ApplyPdfTextEditsResult>("pdf_text_apply_edits", { inputPath, outputPath, edits });
+}
+
 export interface ImageConvertArgs {
   inputs: string[];
   format: "webp" | "png" | "jpg" | "ico";

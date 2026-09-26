@@ -104,7 +104,7 @@ export const MODULES = {
       "Capturar site baixa o motor de captura de sites (~46 MB), baixado uma única vez. Ele navega o site de verdade (Chromium) para extrair texto, Markdown, links e screenshots.",
     rotuloBotao: "Baixar módulo (~46 MB)",
     tamanho: "~46 MB",
-    usadoPor: "Capturar site, Capturar imagens",
+    usadoPor: "Capturar site, Capturar imagens, Prospecção de leads",
     icone: Globe,
     evento: "webcapture-progress",
     checar: webcaptureInstalled,

@@ -1,4 +1,5 @@
 mod commands;
+mod leads;
 
 pub fn run() {
     tauri::Builder::default()
@@ -44,6 +45,25 @@ pub fn run() {
             commands::hash_files,
             commands::save_markdown,
             commands::open_folder,
+            commands::open_external_url,
+            leads::lead_initialize,
+            leads::lead_campaigns,
+            leads::lead_save_campaign,
+            leads::lead_delete_campaign,
+            leads::lead_list,
+            leads::lead_save,
+            leads::lead_update,
+            leads::lead_trash,
+            leads::lead_restore,
+            leads::lead_purge,
+            leads::lead_stages,
+            leads::lead_save_stages,
+            leads::lead_score_weights,
+            leads::lead_save_score_weights,
+            leads::lead_export_markdown,
+            leads::lead_import_markdown,
+            leads::lead_instagram_profile_dir,
+            leads::lead_clear_instagram_session,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
