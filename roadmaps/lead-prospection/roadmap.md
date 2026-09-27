@@ -102,3 +102,13 @@ Instagram, auditoria de sites com Playwright, minimapa e CRM persistente.
 `bc88ce3a1aac7b2d5ae3a9bc2887863cccc872c26b9e3a3ab8c0bf67edbbbc2f`.
 O executável empacotado reconheceu `--tool search_leads` e devolveu a validação
 esperada para entrada vazia, comprovando que `python/leads.py` entrou no bundle.
+
+### Release v1.3.0 — troca da chave de assinatura
+
+A senha da `~/.tauri/camps-utils.key` foi perdida (a `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+do Windows é do projeto OMNI). Gerada `~/.tauri/camps-utils-v2.key`; caminho e senha no
+`.env` (gitignored). Pubkey nova em `src-tauri/tauri.conf.json`, instalador recompilado e
+assinado com ela. **Consequência:** quem está na ≤1.2.0 não recebe a 1.3.0 pelo updater
+(assinatura recusada) — precisa reinstalar na mão uma vez. CLAUDE.md atualizado.
+
+- [ ] Build assinado + `latest.json` + Release `v1.3.0` publicado.

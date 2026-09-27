@@ -82,12 +82,20 @@ Marcar os depósitos como pre-release faz a ordem de publicação deixar de impo
 `bundle.createUpdaterArtifacts: true` exige as duas variáveis **no terminal onde o build roda**,
 senão `npm run build` falha com "A public key has been found, but no private key":
 
-```bash
-export TAURI_SIGNING_PRIVATE_KEY="$(cat "$USERPROFILE/.tauri/camps-utils.key")"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<senha da chave>"
+A chave em uso é `~/.tauri/camps-utils-v2.key` (desde a 1.3.0). Caminho e senha ficam no `.env` da
+raiz (ignorado pelo git) como `CAMPS_UTILS_SIGNING_KEY_PATH` e `CAMPS_UTILS_SIGNING_PASSWORD`.
+Carregar no PowerShell antes do build:
+
+```powershell
+Get-Content .env | ? { $_ -match '^(\w+)=(.*)$' } | % { Set-Item "Env:$($Matches[1])" $Matches[2] }
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $env:CAMPS_UTILS_SIGNING_KEY_PATH -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:CAMPS_UTILS_SIGNING_PASSWORD
 ```
 
-Não são arquivo do projeto e **nunca** entram no repositório. Para gravar de vez no Windows, use
+**Não use a `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` do usuário do Windows** — ela é de outro projeto
+(OMNI). A `camps-utils.key` original teve a senha perdida em 2026-09; por isso a 1.3.0 trocou de
+chave e quem estava na ≤1.2.0 teve que reinstalar na mão. Chave e senha precisam de backup fora
+da máquina. O `.env` e a chave **nunca** entram no repositório. Para gravar de vez no Windows, use
 `[Environment]::SetEnvironmentVariable(..., "User")` no PowerShell e abra um terminal novo. Em CI,
 vão como *repository secrets*.
 
