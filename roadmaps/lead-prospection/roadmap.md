@@ -111,4 +111,4 @@ do Windows é do projeto OMNI). Gerada `~/.tauri/camps-utils-v2.key`; caminho e 
 assinado com ela. **Consequência:** quem está na ≤1.2.0 não recebe a 1.3.0 pelo updater
 (assinatura recusada) — precisa reinstalar na mão uma vez. CLAUDE.md atualizado.
 
-- [ ] Build assinado + `latest.json` + Release `v1.3.0` publicado.
+- [x] Build assinado + `latest.json` + Release [v1.3.0](https://github.com/FelipeCamposM/CAMPS-UTILS/releases/tag/v1.3.0) publicado (Latest; `latest.json` servido com 1.3.0).
