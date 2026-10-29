@@ -23,6 +23,8 @@ pub fn run() {
             commands::ensure_rembg,
             commands::webcapture_installed,
             commands::ensure_webcapture,
+            commands::pdfword_installed,
+            commands::ensure_pdfword,
             commands::create_zip,
             commands::run_tool,
             commands::youtube_info,

@@ -33,5 +33,8 @@ scikit-image>=0.22
 playwright>=1.40
 beautifulsoup4>=4.12
 markdownify>=0.13
+# PDF → Word. Vai no bundle `pdfword`, não no light (puxa OpenCV).
+pdf2docx>=0.5.8
+fonttools>=4.24
 pyinstaller>=6.0.0
 pytest>=8.0.0

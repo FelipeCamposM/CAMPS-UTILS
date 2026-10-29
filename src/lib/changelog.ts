@@ -24,6 +24,16 @@ export interface Novidade {
 /** Mais recente primeiro — a ordem da lista é a ordem daqui. */
 export const NOVIDADES: Novidade[] = [
   {
+    versao: "1.3.1",
+    data: "29/10/2026",
+    itens: [
+      "Nova ferramenta Transcrever áudio: transforma a fala de um áudio ou vídeo em texto para copiar ou salvar.",
+      "Nova ferramenta PDF → Word: transforma um PDF em documento editável, com texto, tabelas e imagens.",
+      "Instalador novo, com a cara do programa e instruções em português passo a passo.",
+      "A Prospecção de leads voltou a funcionar para quem atualizou de uma versão anterior — o app agora baixa de novo o complemento que estava desatualizado.",
+    ],
+  },
+  {
     versao: "1.3.0",
     data: "26/09/2026",
     itens: [

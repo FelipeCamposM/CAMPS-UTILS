@@ -1,11 +1,12 @@
 import type { ReactNode, ComponentType } from "react";
 import type { ModuleId } from "../components/ModuleGate";
-import { Braces, Captions, CirclePlay, Eraser, FileEdit, FileOutput, FileText, FileType, Film, Globe, Hash, Image, Layers, MapPinned, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
+import { AudioLines, Braces, Captions, CirclePlay, Eraser, FileEdit, FileOutput, FileText, FileType, Film, Globe, Hash, Image, Layers, MapPinned, Music, QrCode, Scaling, Scissors, Shrink, Sparkles, Spline, Subtitles, Video } from "lucide-react";
 import type { AppSettings } from "../types/settings";
 import type { HistoryEntry } from "../types/conversion";
 import { PdfToMarkdownTool } from "./pdf-to-markdown/PdfToMarkdownTool";
 import { MarkdownToPdfTool } from "./markdown-to-pdf/MarkdownToPdfTool";
 import { DocxToPdfTool } from "./docx-to-pdf/DocxToPdfTool";
+import { PdfToWordTool } from "./pdf-to-word/PdfToWordTool";
 import { PdfToolsTool } from "./pdf-tools/PdfToolsTool";
 import { EditPdfTextTool } from "./edit-pdf-text/EditPdfTextTool";
 import { ImageConvertTool } from "./image-convert/ImageConvertTool";
@@ -24,6 +25,7 @@ import { AudioConvertTool } from "./audio-convert/AudioConvertTool";
 import { VideoToGifTool } from "./video-to-gif/VideoToGifTool";
 import { VideoSubtitleTool } from "./video-subtitle/VideoSubtitleTool";
 import { VideoBurnTool } from "./video-burn/VideoBurnTool";
+import { AudioTranscribeTool } from "./audio-transcribe/AudioTranscribeTool";
 import { WebCaptureTool } from "./web-capture/WebCaptureTool";
 import { WebCaptureImagesTool } from "./web-capture/WebCaptureImagesTool";
 import { LeadsTool } from "./leads/LeadsTool";
@@ -104,6 +106,15 @@ export const TOOLS: ToolDef[] = [
     category: "documentos",
     icon: <FileType className="w-full h-full" />,
     component: DocxToPdfTool,
+  },
+  {
+    id: "pdf-to-word",
+    name: "PDF → Word",
+    description: "Transforma PDF em documento .docx editável, sem precisar do Word.",
+    category: "documentos",
+    icon: <FileText className="w-full h-full" />,
+    component: PdfToWordTool,
+    module: "pdfword",
   },
   {
     id: "pdf-tools",
@@ -188,6 +199,15 @@ export const TOOLS: ToolDef[] = [
     category: "midia",
     icon: <Captions className="w-full h-full" />,
     component: VideoSubtitleTool,
+    module: "whisper",
+  },
+  {
+    id: "audio-transcribe",
+    name: "Transcrever áudio",
+    description: "Transforma fala de áudio ou vídeo em texto, sem nuvem.",
+    category: "midia",
+    icon: <AudioLines className="w-full h-full" />,
+    component: AudioTranscribeTool,
     module: "whisper",
   },
   {

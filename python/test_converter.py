@@ -356,6 +356,27 @@ class TestDocxToPdf:
         assert out.exists()
 
 
+class TestPdfToDocx:
+    def test_rejects_non_pdf(self, tmp_path):
+        f = tmp_path / "a.txt"
+        f.write_text("x")
+        r = dispatch("pdf2docx", {"inputPath": str(f), "outputPath": str(tmp_path / "o.docx")})
+        assert r["errorCode"] == "UNSUPPORTED_FORMAT"
+
+    def test_generates_docx_with_text(self, tmp_path):
+        pytest.importorskip("pdf2docx")
+        import fitz
+        import docx
+        pdf = tmp_path / "a.pdf"
+        d = fitz.open()
+        d.new_page().insert_text((72, 72), "Ola mundo", fontsize=14)
+        d.save(str(pdf))
+        out = tmp_path / "a.docx"
+        r = dispatch("pdf2docx", {"inputPath": str(pdf), "outputPath": str(out)})
+        assert r["success"] is True, r
+        assert "Ola mundo" in " ".join(p.text for p in docx.Document(str(out)).paragraphs)
+
+
 class TestPdfMerge:
     def test_needs_two(self, tmp_path):
         pdf = tmp_path / "a.pdf"

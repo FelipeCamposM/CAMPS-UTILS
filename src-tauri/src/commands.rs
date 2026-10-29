@@ -56,6 +56,7 @@ async fn run_python_tool(app: &AppHandle, tool: &str, input_json: &str) -> Resul
             // 45 MB baixados nem recarregar modelo nenhum.
             "depth_map" => run_module_sidecar(app, depth_exe_path(app), "DEPTH_MISSING", tool, input_json).await,
             "remove_bg" => run_module_sidecar(app, rembg_exe_path(app), "REMBG_MISSING", tool, input_json).await,
+            "pdf2docx" => run_module_sidecar(app, pdfword_exe_path(app), "PDFWORD_MISSING", tool, input_json).await,
             "capture_site" | "search_leads" => run_module_sidecar(app, webcapture_exe_path(app), "WEBCAPTURE_MISSING", tool, input_json).await,
             _ => run_sidecar_python(app, tool, input_json).await,
         }
@@ -231,6 +232,10 @@ struct RemoteModule {
     event: &'static str,
     /// Arquivo que prova que o módulo já está extraído.
     marker: &'static str,
+    /// Versão do conteúdo, gravada em `<marker>.version` ao instalar. Mudou ⇒
+    /// o módulo é rebaixado por cima. Instalação sem o arquivo conta como "v1"
+    /// (tudo que existia antes deste campo), então só suba ao trocar o zip.
+    version: &'static str,
     /// Rótulo em pt-BR usado nas mensagens de erro.
     label: &'static str,
 }
@@ -241,6 +246,7 @@ const DOCLING: RemoteModule = RemoteModule {
     zip_name: "camps-docling.zip",
     event: "docling-progress",
     marker: "converter-docling-x86_64-pc-windows-msvc.exe",
+    version: "v1",
     label: "PDF → Markdown",
 };
 
@@ -254,6 +260,7 @@ const FFMPEG: RemoteModule = RemoteModule {
     zip_name: "camps-ffmpeg.zip",
     event: "ffmpeg-progress",
     marker: "ffmpeg.exe",
+    version: "v1",
     label: "Mídia (ffmpeg)",
 };
 
@@ -271,6 +278,7 @@ const WHISPER: RemoteModule = RemoteModule {
     zip_name: "camps-whisper.zip",
     event: "whisper-progress",
     marker: "converter-whisper-x86_64-pc-windows-msvc.exe",
+    version: "v1",
     label: "Transcrição (Whisper)",
 };
 
@@ -292,6 +300,7 @@ const DEPTH: RemoteModule = RemoteModule {
     zip_name: "camps-depth.zip",
     event: "depth-progress",
     marker: "converter-depth-x86_64-pc-windows-msvc.exe",
+    version: "v1",
     label: "Profundidade (Depth Anything V2)",
 };
 
@@ -312,6 +321,7 @@ const REALESRGAN: RemoteModule = RemoteModule {
     zip_name: "camps-realesrgan.zip",
     event: "realesrgan-progress",
     marker: "realesrgan/realesrgan-ncnn-vulkan.exe",
+    version: "v1",
     label: "Aumentar qualidade (Real-ESRGAN)",
 };
 
@@ -333,6 +343,7 @@ const REMBG: RemoteModule = RemoteModule {
     zip_name: "camps-rembg.zip",
     event: "rembg-progress",
     marker: "converter-rembg-x86_64-pc-windows-msvc.exe",
+    version: "v1",
     label: "Remover fundo (u2net)",
 };
 
@@ -344,6 +355,7 @@ const WEBCAPTURE: RemoteModule = RemoteModule {
     zip_name: "camps-webcapture.zip",
     event: "webcapture-progress",
     marker: "converter-webcapture-x86_64-pc-windows-msvc.exe",
+    version: "v2",
     label: "Capturar site (Playwright)",
 };
 
@@ -386,6 +398,52 @@ pub async fn ensure_rembg(app: AppHandle) -> Result<(), String> {
     #[cfg(not(debug_assertions))]
     {
         ensure_module(&app, &REMBG).await
+    }
+}
+
+/// PDF → Word (pdf2docx). Fora do instalador porque o pdf2docx importa OpenCV.
+const PDFWORD: RemoteModule = RemoteModule {
+    url: "https://github.com/FelipeCamposM/CAMPS-UTILS/releases/download/pdfword-v1/camps-pdfword.zip",
+    // SHA do `python/dist/camps-pdfword.zip` (88 MB) de 2026-10-29; o .exe
+    // empacotado converteu um PDF com texto + imagem em 0,8 s. Não reproduzível.
+    sha256: "9a80c93b8c6d16ad3008d5605c9205f7fb119bd35db34fe2411ec20bc1aae635",
+    zip_name: "camps-pdfword.zip",
+    event: "pdfword-progress",
+    marker: "converter-pdfword-x86_64-pc-windows-msvc.exe",
+    version: "v1",
+    label: "PDF → Word",
+};
+
+#[cfg(not(debug_assertions))]
+fn pdfword_exe_path(app: &AppHandle) -> Option<PathBuf> {
+    runtime_dir(app).map(|d| d.join(format!("converter-pdfword-{TARGET_TRIPLE}.exe")))
+}
+
+/// Informa se o módulo PDF → Word está pronto. Em dev, sempre true.
+#[tauri::command]
+pub async fn pdfword_installed(app: AppHandle) -> bool {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        true
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        module_installed(&app, &PDFWORD)
+    }
+}
+
+/// Baixa e extrai o módulo PDF → Word. Emite `pdfword-progress` (0–100).
+#[tauri::command]
+pub async fn ensure_pdfword(app: AppHandle) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        return Ok(());
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        ensure_module(&app, &PDFWORD).await
     }
 }
 
@@ -518,9 +576,22 @@ fn docling_exe_path(app: &AppHandle) -> Option<PathBuf> {
 }
 
 fn module_installed(app: &AppHandle, m: &RemoteModule) -> bool {
-    runtime_dir(app)
-        .map(|d| d.join(m.marker).exists())
-        .unwrap_or(false)
+    runtime_dir(app).is_some_and(|d| module_current(&d, m))
+}
+
+fn version_file(dir: &Path, m: &RemoteModule) -> PathBuf {
+    dir.join(format!("{}.version", m.marker))
+}
+
+/// Marker presente **e** na versão esperada. Sem isso, quem tinha o
+/// webcapture-v1 seguia com ele após o app passar a pedir o v2 (`search_leads`
+/// respondia "Ferramenta desconhecida").
+fn module_current(dir: &Path, m: &RemoteModule) -> bool {
+    dir.join(m.marker).exists()
+        && std::fs::read_to_string(version_file(dir, m))
+            .map(|v| v.trim().to_string())
+            .unwrap_or_else(|_| "v1".to_string())
+            == m.version
 }
 
 /// Informa se o módulo Docling está pronto. Em dev, sempre true (roda a fonte).
@@ -651,7 +722,7 @@ async fn ensure_module(app: &AppHandle, m: &RemoteModule) -> Result<(), String> 
 
     let dir = runtime_dir(app).ok_or("pasta local não encontrada")?;
     let marker = dir.join(m.marker);
-    if marker.exists() {
+    if module_current(&dir, m) {
         return Ok(());
     }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -707,6 +778,7 @@ async fn ensure_module(app: &AppHandle, m: &RemoteModule) -> Result<(), String> 
             m.label, m.marker
         ));
     }
+    std::fs::write(version_file(&dir, m), m.version).map_err(|e| e.to_string())?;
     let _ = app.emit(m.event, 100u32);
     Ok(())
 }
@@ -2191,6 +2263,20 @@ pub fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn module_version_forces_redownload() {
+        let dir = std::env::temp_dir().join(format!("camps_modver_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Instalado por um app antigo: marker sem arquivo de versão = "v1".
+        std::fs::write(dir.join(WEBCAPTURE.marker), b"").unwrap();
+        std::fs::write(dir.join(DOCLING.marker), b"").unwrap();
+        assert!(!module_current(&dir, &WEBCAPTURE), "v1 instalado, app pede v2");
+        assert!(module_current(&dir, &DOCLING), "sem .version continua valendo como v1");
+        std::fs::write(version_file(&dir, &WEBCAPTURE), "v2").unwrap();
+        assert!(module_current(&dir, &WEBCAPTURE));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn hash_known_vectors() {

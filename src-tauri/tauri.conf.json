@@ -1,6 +1,6 @@
 {
   "productName": "CAMPS-UTILS",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "identifier": "com.camps.utils",
   "build": {
     "frontendDist": "../dist",
@@ -48,6 +48,18 @@
     "createUpdaterArtifacts": true,
     "resources": {
       "../assets/fonts": "fonts"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "installer/installer.ico",
+        "sidebarImage": "installer/sidebar.bmp",
+        "headerImage": "installer/header.bmp",
+        "installerHooks": "installer/hooks.nsh",
+        "languages": [
+          "PortugueseBR"
+        ],
+        "displayLanguageSelector": false
+      }
     }
   },
   "plugins": {

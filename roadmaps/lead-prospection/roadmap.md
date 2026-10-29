@@ -112,3 +112,25 @@ assinado com ela. **Consequência:** quem está na ≤1.2.0 não recebe a 1.3.0 
 (assinatura recusada) — precisa reinstalar na mão uma vez. CLAUDE.md atualizado.
 
 - [x] Build assinado + `latest.json` + Release [v1.3.0](https://github.com/FelipeCamposM/CAMPS-UTILS/releases/tag/v1.3.0) publicado (Latest; `latest.json` servido com 1.3.0).
+
+### v1.3.1 — prospecção quebrada no app atualizado + Transcrever áudio
+
+- [x] **Bug:** "Ferramenta desconhecida: search_leads" no app instalado. Quem veio da 1.2.0
+  tinha o webcapture-v1 em `runtime/`; o app só checava se o marker existia e nunca rebaixava o
+  v2. Correção em `src-tauri/src/commands.rs`: campo `version` no `RemoteModule`,
+  `module_current()` compara com `<marker>.version` (ausente = "v1"), `ensure_module` grava o
+  arquivo. WEBCAPTURE = "v2", demais "v1". Teste `module_version_forces_redownload`.
+- [x] **Transcrever áudio** (`src/tools/audio-transcribe/AudioTranscribeTool.tsx`, registry,
+  módulo `whisper`): reaproveita `transcribe` + `CamposTranscricao` (ritmo agora opcional),
+  junta os segmentos em texto corrido, edita, copia ou salva `.txt` via `save_markdown`. Sem
+  mudança no Python → sem novo zip do whisper.
+- [x] typecheck, vitest 112/112, cargo test 19/19.
+- [x] **PDF → Word** (`src/tools/pdf-to-word/PdfToWordTool.tsx`, tool `pdf2docx` em
+  `python/converter.py::convert_pdf_to_docx`): pdf2docx importa OpenCV no topo, então virou
+  módulo próprio `pdfword-v1` (`python build.py pdfword`, 88 MB; exe empacotado testado com PDF
+  de texto + imagem). `PDFWORD` em `commands.rs`, `pdfword_installed`/`ensure_pdfword` em
+  `lib.rs`, entrada `pdfword` no `ModuleGate`. `PDFWORD_STACK` excluído dos outros bundles.
+  pytest `TestPdfToDocx`.
+- [x] **Instalador personalizado**: `src-tauri/installer/` (ícone, sidebar, header, hooks.nsh com
+  textos pt-BR passo a passo e tema escuro), gerado por `scripts/make-installer-art.py`.
+- [x] Publicar `pdfword-v1` (pre-release) + Release `v1.3.1` (29/10/2026).

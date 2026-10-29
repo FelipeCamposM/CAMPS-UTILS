@@ -11,6 +11,8 @@ Alvos:
              zipado p/ o Release, baixado sob demanda no 1º mapa de profundidade.
   rembg   -> converter-rembg-<triple>.exe (rembg/u2net via ONNX Runtime) —
              zipado p/ o Release, baixado sob demanda na 1ª remoção de fundo.
+  pdfword -> converter-pdfword-<triple>.exe (pdf2docx) — zipado p/ o Release,
+             baixado sob demanda no 1º PDF → Word.
   webcapture -> converter-webcapture-<triple>.exe (Playwright dirigindo o Edge
              do Windows) — zipado p/ o Release, baixado sob demanda na 1ª captura.
   ffmpeg  -> camps-ffmpeg.zip (ffmpeg.exe + ffprobe.exe) — não compila nada, só
@@ -67,6 +69,10 @@ WEBCAPTURE_STACK = [
     "bs4", "beautifulsoup4", "soupsieve", "markdownify",
 ]
 
+# A pilha do PDF → Word, vista de fora. `convert_pdf_to_docx` importa pdf2docx
+# DENTRO da função; o OpenCV que ele puxa já está em DOCLING_MODULES (`cv2`).
+PDFWORD_STACK = ["pdf2docx", "fontTools", "fire"]
+
 # A pilha da remoção de fundo, vista de fora. `converter.py::remove_bg` faz
 # `import bgremove` DENTRO da função, e o PyInstaller segue isso: sem excluir,
 # todo bundle que não é o do rembg engordaria ~100 MB (numba, llvmlite,
@@ -80,7 +86,7 @@ REMBG_STACK = [
 # `import depth`, e depth.py importa numpy + onnxruntime no topo — sem excluir o
 # próprio módulo `depth`, o instalador engordaria ~70 MB com a inferência que
 # nunca roda ali (o Rust manda `depth_map` para o sidecar `depth`).
-LIGHT_EXCLUDES = ["depth"] + REMBG_STACK + WEBCAPTURE_STACK
+LIGHT_EXCLUDES = ["depth"] + REMBG_STACK + WEBCAPTURE_STACK + PDFWORD_STACK
 
 
 # Arrastados transitivamente pelo yt-dlp e inúteis na transcrição. `pillow_heif`
@@ -102,7 +108,7 @@ DEPTH_EXCLUDES = [
     "pandas", "huggingface_hub", "hf_xet", "lxml",
     "pydantic", "pydantic_core", "safetensors",
     "pillow_heif",
-] + REMBG_STACK + WEBCAPTURE_STACK
+] + REMBG_STACK + WEBCAPTURE_STACK + PDFWORD_STACK
 
 # O que o bundle do rembg PRECISA e portanto não pode ser excluído pelas listas
 # dos outros módulos. `requests`/`urllib3` estão aqui porque o pooch baixa os
@@ -212,7 +218,7 @@ def build_whisper(triple: str) -> None:
     # onnxruntime`. A exclusão vence, e o exe morria em tempo de execução com
     # "Applying the VAD filter requires the onnxruntime package" — só no
     # empacotado, porque em dev a .venv tem tudo.
-    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + REMBG_STACK + WEBCAPTURE_STACK
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + REMBG_STACK + WEBCAPTURE_STACK + PDFWORD_STACK
                if m not in coletar]
 
     extra: list[str] = []
@@ -375,6 +381,40 @@ def build_webcapture(triple: str) -> None:
           "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> WEBCAPTURE.sha256")
 
 
+def build_pdfword(triple: str) -> None:
+    """Sidecar PDF → Word (pdf2docx + PyMuPDF + OpenCV + python-docx)."""
+    name = f"converter-pdfword-{triple}"
+    print(f"\n=== Bundle PDFWORD: {name} ===")
+
+    coletar = ["pdf2docx", "fitz", "docx"]
+    # cv2/numpy/lxml/PIL estão nas listas de exclusão dos vizinhos, mas aqui
+    # são o próprio motor — subtraídos, senão o exe abre e morre no import.
+    precisa = coletar + PDFWORD_STACK + ["cv2", "numpy", "lxml", "PIL"]
+    excluir = [m for m in DOCLING_MODULES + LIGHT_COLLECTS + WHISPER_EXCLUDES + DEPTH_EXCLUDES + REMBG_STACK
+               if m not in precisa]
+
+    extra: list[str] = []
+    for lib in coletar:
+        extra += ["--collect-all", lib]
+    for mod in dict.fromkeys(excluir):
+        extra += ["--exclude-module", mod]
+
+    exe = _run_pyinstaller(name, extra)
+
+    zip_path = DIST_DIR / "camps-pdfword.zip"
+    print(f"\nZipando {exe.name} -> {zip_path.name} …")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(exe, arcname=exe.name)
+
+    sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (DIST_DIR / "camps-pdfword.sha256").write_text(sha, encoding="utf-8")
+
+    print(f"\nZip:    {zip_path}  ({zip_path.stat().st_size // (1024*1024)} MB)")
+    print(f"SHA256: {sha}")
+    print("\n>> Suba 'camps-pdfword.zip' num Release com a tag 'pdfword-v1' (marcado como "
+          "pre-release) e cole o SHA256 em src-tauri/src/commands.rs -> PDFWORD.sha256")
+
+
 def build_ffmpeg() -> None:
     """Zipa ffmpeg.exe + ffprobe.exe p/ o Release. Não compila nada."""
     print("\n=== Bundle FFMPEG ===")
@@ -473,7 +513,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build dos sidecars CAMPS-UTILS")
     parser.add_argument("target", nargs="?", default="both",
                         choices=["light", "docling", "whisper", "depth", "rembg", "webcapture",
-                                 "ffmpeg", "realesrgan", "both"])
+                                 "pdfword", "ffmpeg", "realesrgan", "both"])
     args = parser.parse_args()
 
     # ffmpeg e realesrgan só empacotam binários prontos: não rodam PyInstaller
@@ -500,5 +540,7 @@ if __name__ == "__main__":
         build_rembg(triple)
     if args.target == "webcapture":
         build_webcapture(triple)
+    if args.target == "pdfword":
+        build_pdfword(triple)
 
     print("\nBuild concluído.")

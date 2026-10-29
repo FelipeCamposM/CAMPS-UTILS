@@ -414,6 +414,54 @@ def convert_docx_to_pdf(input_path: str | None, output_path: str | None) -> dict
         return make_error("RENDER_FAILED", "Não foi possível gerar o PDF.")
 
 
+def convert_pdf_to_docx(input_path: str | None, output_path: str | None) -> dict:
+    """PDF → DOCX editável com pdf2docx (layout, tabelas e imagens).
+
+    Roda no módulo `pdfword`, não no light: o pdf2docx importa OpenCV no topo
+    (`common/algorithm.py`), e isso não pode entrar em toda atualização.
+    PDF escaneado (só imagem) sai como imagem no Word — aqui não há OCR.
+    """
+    start = time.time()
+
+    if not input_path:
+        return make_error("INVALID_INPUT", "Nenhum arquivo PDF informado.")
+    p = Path(input_path)
+    if not p.exists():
+        return make_error("FILE_NOT_FOUND", "Arquivo PDF não encontrado.")
+    if p.suffix.lower() != ".pdf":
+        return make_error("UNSUPPORTED_FORMAT", "Só arquivos .pdf são suportados.")
+    if not output_path:
+        return make_error("OUTPUT_ERROR", "Caminho de saída não informado.")
+
+    try:
+        from pdf2docx import Converter
+    except ImportError as e:
+        log(f"MODEL_ERROR: {e}")
+        return make_error("MODEL_ERROR", "Módulo PDF → Word não encontrado.")
+
+    conv = None
+    try:
+        log("STEP: Lendo PDF")
+        conv = Converter(str(p))
+        log("STEP: Montando documento Word")
+        conv.convert(output_path)
+    except Exception as e:
+        log(f"RENDER_FAILED: {type(e).__name__}: {e}")
+        msg = str(e).lower()
+        if "password" in msg or "encrypt" in msg:
+            return make_error("RENDER_FAILED", "O PDF está protegido por senha.")
+        return make_error("RENDER_FAILED", "Não foi possível converter o PDF para Word.")
+    finally:
+        if conv is not None:
+            conv.close()
+
+    return {
+        "success": True,
+        "outputPath": output_path,
+        "durationMs": int((time.time() - start) * 1000),
+    }
+
+
 def convert_md_to_pdf(input_path: str | None, output_path: str | None, markdown_text: str | None) -> dict:
     start = time.time()
 
@@ -1858,6 +1906,12 @@ def dispatch(tool: str, data: dict) -> dict:
 
     if tool == "docx2pdf":
         return convert_docx_to_pdf(
+            data.get("inputPath", "").strip() or None,
+            data.get("outputPath", "").strip() or None,
+        )
+
+    if tool == "pdf2docx":
+        return convert_pdf_to_docx(
             data.get("inputPath", "").strip() or None,
             data.get("outputPath", "").strip() or None,
         )

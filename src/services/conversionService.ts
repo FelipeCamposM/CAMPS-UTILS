@@ -811,6 +811,8 @@ export async function captureSite(args: CaptureArgs) {
   });
 }
 
+export async function pdfwordInstalled() { return invoke<boolean>("pdfword_installed"); }
+export async function ensurePdfword() { await invoke("ensure_pdfword"); }
 export async function webcaptureInstalled() { return invoke<boolean>("webcapture_installed"); }
 export async function ensureWebcapture() { await invoke("ensure_webcapture"); }
 export async function createZip(sourceDir: string, destZip: string) {

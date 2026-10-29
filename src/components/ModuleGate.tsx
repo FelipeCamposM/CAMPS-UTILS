@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Eraser, FileScan, Globe, Layers, Sparkles } from "lucide-react";
+import { AudioLines, Clapperboard, Eraser, FileScan, FileType, Globe, Layers, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -7,11 +7,13 @@ import {
   ensureDepth,
   ensureDocling,
   ensureFfmpeg,
+  ensurePdfword,
   ensureRealesrgan,
   ensureRembg,
   ensureWebcapture,
   ensureWhisper,
   ffmpegInstalled,
+  pdfwordInstalled,
   realesrganInstalled,
   rembgInstalled,
   webcaptureInstalled,
@@ -109,6 +111,18 @@ export const MODULES = {
     evento: "webcapture-progress",
     checar: webcaptureInstalled,
     baixar: ensureWebcapture,
+  },
+  pdfword: {
+    titulo: "Módulo PDF → Word",
+    descricao:
+      "PDF → Word baixa o motor de conversão (~90 MB), uma única vez. Ele reconstrói texto, tabelas e imagens do PDF num documento editável.",
+    rotuloBotao: "Baixar módulo (~90 MB)",
+    tamanho: "~90 MB",
+    usadoPor: "PDF → Word",
+    icone: FileType,
+    evento: "pdfword-progress",
+    checar: pdfwordInstalled,
+    baixar: ensurePdfword,
   },
 } as const;
 

@@ -120,6 +120,18 @@ novo** — a pública fica gravada no binário deles e não há como trocar remo
    o instalador (`*-setup.exe`), o `.sig` dele e o `latest.json`.
 7. Registrar no `roadmaps/new-functions/roadmap.md`.
 
+### Instalador personalizado
+
+`bundle.windows.nsis` no `tauri.conf.json` aponta para `src-tauri/installer/`: ícone próprio do
+setup (`installer.ico`, seta de download — distinto do ícone do app), `sidebar.bmp`/`header.bmp`
+no tema escuro, idioma só `PortugueseBR` e `hooks.nsh` com os textos de cada tela e as cores
+(`MUI_BGCOLOR`/`MUI_TEXTCOLOR`). A arte é gerada por `python scripts/make-installer-art.py`.
+O `hooks.nsh` é incluído **antes** das páginas pelo template do Tauri, então cada `MUI_*PAGE_*`
+vale para a próxima página daquele tipo. Não defina ali o que o template já define (ex.:
+`MUI_FINISHPAGE_SHOWREADME_TEXT`) — o makensis recusa redefinição. O arquivo precisa estar em
+UTF-8 **com BOM**. `MUI_FORCECLASSICCONTROLS` é o que deixa o texto das caixas de seleção legível
+no fundo escuro.
+
 ### Armadilhas conhecidas
 
 - **O nome do artefato assinado muda entre versões do Tauri.** Antigas: `*-setup.nsis.zip` +
@@ -146,10 +158,15 @@ tudo de novo). Ficam em Releases de depósito, verificados por SHA256, extraído
 | Depth Anything V2 | `depth-v1` | `camps-depth.zip` (~48 MB) | `python build.py depth` |
 | Real-ESRGAN (upscale) | `realesrgan-v1` | `camps-realesrgan.zip` (~31 MB) | `python build.py realesrgan` |
 | rembg (remover fundo) | `rembg-v1` | `camps-rembg.zip` (~130 MB) | `python build.py rembg` |
+| Capturar site / leads | `webcapture-v2` | `camps-webcapture.zip` (~56 MB) | `python build.py webcapture` |
+| PDF → Word (pdf2docx) | `pdfword-v1` | `camps-pdfword.zip` (~88 MB) | `python build.py pdfword` |
 
-Trocar o conteúdo de um módulo exige: nova tag, novo zip, e **atualizar `url` e `sha256`** no
-`commands.rs`. O `marker` (arquivo que prova que está instalado) não tem versão no nome — se um dia
-o conteúdo mudar sem trocar o marker, o app mantém o módulo velho e não rebaixa.
+Trocar o conteúdo de um módulo exige: nova tag, novo zip, **atualizar `url` e `sha256`** e
+**subir o `version`** no `commands.rs`. Ao instalar, o app grava `<marker>.version`; se não bater
+com o `version` do código, o módulo conta como não instalado e o `ModuleGate` rebaixa. Sem o
+arquivo, vale `"v1"`. Esquecer de subir o `version` repete o bug da 1.3.0: quem tinha o
+webcapture-v1 ficou com ele e a prospecção respondia "Ferramenta desconhecida: search_leads".
+(`ffmpeg`/`realesrgan` checam via `resolve_bundled`, não pelo `version`.)
 
 Alguns módulos ainda baixam **pesos** à parte, no primeiro uso: o Docling e o Whisper no cache da
 HuggingFace, o Depth em `~/.cache/camps-utils/models/`. O zip do módulo é só o runtime.

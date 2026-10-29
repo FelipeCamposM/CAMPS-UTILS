@@ -25,7 +25,7 @@ beforeEach(() => {
 
 /** Landing é a Home; abre a ferramenta PDF → Markdown antes de testar o conversor. */
 async function openPdfTool() {
-  await userEvent.click(screen.getByRole("button", { name: /abrir pdf/i }));
+  await userEvent.click(screen.getByRole("button", { name: /abrir pdf → markdown/i }));
 }
 
 /** Abre o tool, seleciona um PDF via diálogo e retorna quando a fila aparece. */
@@ -39,7 +39,7 @@ async function addPdf(path = "C:\\docs\\relatorio.pdf") {
 describe("Home / navegação", () => {
   it("mostra a Home com as ferramentas no carregamento", () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: /abrir pdf/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /abrir pdf → markdown/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /abrir converter imagens/i })).toBeInTheDocument();
   });
 

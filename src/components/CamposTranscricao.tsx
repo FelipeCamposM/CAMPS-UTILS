@@ -31,8 +31,9 @@ export function CamposTranscricao({
   setIdioma: (v: string) => void;
   modelo: WhisperModelSize;
   setModelo: (v: WhisperModelSize) => void;
-  ritmo: SubtitleRhythm;
-  setRitmo: (v: SubtitleRhythm) => void;
+  /** Sem ritmo (ex.: transcrição em texto corrido) o seletor some. */
+  ritmo?: SubtitleRhythm;
+  setRitmo?: (v: SubtitleRhythm) => void;
   /** As duas abas coexistem no DOM; sem prefixo os `id` colidiriam. */
   prefixo: string;
 }) {
@@ -59,13 +60,13 @@ export function CamposTranscricao({
         />
       </Field>
 
-      <SegmentedControl
+      {ritmo && setRitmo && <SegmentedControl
         label="Ritmo"
         options={SUBTITLE_RHYTHMS.map((r) => ({ value: r.value, label: r.label }))}
         value={ritmo}
         onChange={setRitmo}
         description={SUBTITLE_RHYTHMS.find((r) => r.value === ritmo)?.descricao}
-      />
+      />}
     </>
   );
 }
